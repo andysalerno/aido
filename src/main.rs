@@ -1,29 +1,25 @@
+use crate::cli::Args;
 use clap::Parser;
+use log::info;
 
-#[derive(Parser)]
-#[command(name = "aido")]
-#[command(version = "1.0.0")]
-#[command(about = "A sample AI assistant application")]
-#[command(long_about = None)]
-struct Args {
-    /// Enable verbose output
-    #[arg(short, long)]
-    verbose: bool,
+mod cli;
+mod config;
 
-    /// Input file to process
-    #[arg(short, long)]
-    input: Option<String>,
-}
-
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    env_logger::init();
     let args = Args::parse();
 
-    if args.verbose {
+    let config = if let Some(config_file) = args.config_file() {
+        config::retrieve_from_path(config_file)?
+    } else {
+        config::retrieve()?
+    };
+
+    info!("Configuration loaded: {config:?}");
+
+    if args.verbose() {
         println!("Verbose mode enabled");
     }
 
-    match args.input {
-        Some(file) => println!("Processing input file: {}", file),
-        None => println!("Hello, world! Use --help for more options."),
-    }
+    Ok(())
 }
