@@ -1,0 +1,29 @@
+[package]
+name = "aido"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+[lints.rust]
+let-underscore = "warn"
+future-incompatible = "warn"
+refining-impl-trait = "warn"
+rust-2024-compatibility = "warn"
+rust-2018-idioms = "warn"
+
+[lints.clippy]
+complexity = { level = "warn", priority = -1 }
+correctness = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_panics_doc = "allow"
+missing_const_for_fn = "allow"
+return_self_not_must_use = "allow"
+missing_errors_doc = "allow"
+
