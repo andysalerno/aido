@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(name = "aido")]
@@ -7,15 +7,24 @@ use clap::Parser;
 #[command(long_about = None)]
 pub struct Args {
     /// Enable verbose output
-    #[arg(short, long)]
+    #[arg(short, long, global = true)]
     verbose: bool,
 
-    #[arg(short, long)]
+    #[arg(short, long, global = true)]
     config_file: Option<String>,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
 
     /// Input file to process
     #[arg(short, long)]
     input: Option<String>,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Show the configuration file path
+    ShowConfigPath,
 }
 
 impl Args {
@@ -25,5 +34,9 @@ impl Args {
 
     pub fn config_file(&self) -> Option<&str> {
         self.config_file.as_deref()
+    }
+
+    pub fn command(&self) -> &Option<Commands> {
+        &self.command
     }
 }
