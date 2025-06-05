@@ -9,6 +9,11 @@ pub struct Config {
     pub timeout: u64,
 }
 
+pub fn get_configuration_file_path() -> Result<String, Box<dyn std::error::Error>> {
+    let path = confy::get_configuration_file_path("aido", None)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 pub fn retrieve() -> Result<Config, Box<dyn std::error::Error>> {
     let cfg: Config = confy::load("aido", None)?;
 
