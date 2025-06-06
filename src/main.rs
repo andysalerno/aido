@@ -27,6 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     info!("Configuration loaded: {config:?}");
+    info!("Test change.");
 
     if args.verbose() {
         println!("Verbose mode enabled");
