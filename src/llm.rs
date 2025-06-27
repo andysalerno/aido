@@ -2,7 +2,9 @@ use async_openai::{
     Client,
     config::OpenAIConfig,
     types::{
-        ChatCompletionRequestMessage, ChatCompletionRequestUserMessage, CreateChatCompletionRequest,
+        ChatCompletionRequestMessage, ChatCompletionRequestUserMessage,
+        ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,
+        CreateAssistantRequestArgs, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
     },
 };
 use log::info;
@@ -48,19 +50,11 @@ impl LlmClient {
         &self,
         request: &LlmRequest,
     ) -> Result<LlmResponse, Box<dyn std::error::Error>> {
-        let request = CreateChatCompletionRequest {
-            model: self.model_name.clone(),
-            temperature: Some(0.7),
-            messages: vec![ChatCompletionRequestMessage::User(
-                ChatCompletionRequestUserMessage {
-                    content: async_openai::types::ChatCompletionRequestUserMessageContent::Text(
-                        request.text.to_owned(),
-                    ),
-                    name: None,
-                },
-            )],
-            ..Default::default()
-        };
+        let request = CreateChatCompletionRequestArgs::default()
+            .model(&self.model_name)
+            .temperature(0.7)
+            .messages(vec![user_message(&request.text)?])
+            .build()?;
 
         let response = RT.block_on(async { self.client.chat().create(request).await })?;
 
@@ -72,4 +66,16 @@ impl LlmClient {
             text: first_choice.message.content.unwrap(),
         })
     }
+}
+
+fn user_message(
+    content: impl Into<String>,
+) -> Result<ChatCompletionRequestMessage, Box<dyn std::error::Error>> {
+    let message = ChatCompletionRequestUserMessageArgs::default()
+        .content(ChatCompletionRequestUserMessageContent::Text(
+            content.into(),
+        ))
+        .build()?;
+
+    Ok(message.into())
 }
