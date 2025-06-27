@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
     pub api_key: String,
     pub api_url: String,
+    pub model_name: String,
     pub timeout: u64,
 }
 

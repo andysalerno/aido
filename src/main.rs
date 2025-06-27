@@ -1,10 +1,15 @@
-use crate::cli::{Args, Commands};
+use crate::{
+    cli::{Args, Commands},
+    config::Config,
+    llm::LlmRequest,
+};
 use clap::Parser;
 use log::info;
 
 mod cli;
 mod config;
 mod llm;
+mod recipe;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
@@ -15,7 +20,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Commands::ShowConfigPath => {
                 let config_path = config::get_configuration_file_path()?;
                 println!("{config_path}");
-                std::process::exit(0);
+
+                return Ok(());
             }
         }
     }
@@ -27,11 +33,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     info!("Configuration loaded: {config:?}");
-    info!("Test change.");
 
-    if args.verbose() {
-        println!("Verbose mode enabled");
+    if let Some(input) = args.input() {
+        info!("Input: {:?}", args.input());
+        run(config, input)?;
+    } else {
+        info!("No input file provided; all done.");
     }
+
+    Ok(())
+}
+
+fn run(config: Config, input: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let llm = llm::LlmClient::new(config.model_name, config.api_key, config.api_url);
+
+    let response = llm.get_chat_completion(&LlmRequest { text: input.into() })?;
+
+    info!("LLM Response: {}", response.text);
 
     Ok(())
 }

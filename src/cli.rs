@@ -16,7 +16,6 @@ pub struct Args {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// Input file to process
     #[arg(short, long)]
     input: Option<String>,
 }
@@ -36,7 +35,11 @@ impl Args {
         self.config_file.as_deref()
     }
 
-    pub fn command(&self) -> &Option<Commands> {
-        &self.command
+    pub fn command(&self) -> Option<&Commands> {
+        self.command.as_ref()
+    }
+
+    pub fn input(&self) -> Option<&str> {
+        self.input.as_deref()
     }
 }
