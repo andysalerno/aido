@@ -1,7 +1,5 @@
 use std::io::Write;
 
-use log::{debug, info};
-
 use crate::{
     config::Config,
     llm::{self, LlmRequest},
