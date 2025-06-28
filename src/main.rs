@@ -23,8 +23,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Commands::Recipe => {
                 println!("...recipes...");
             }
-            Commands::Run => {
-                println!("...running it...");
+            Commands::Run { recipe } => {
+                println!("...running recipe: {recipe}");
             }
         }
     }

@@ -27,7 +27,9 @@ pub enum Commands {
     /// Recipe-related commands
     Recipe,
 
-    Run,
+    Run {
+        recipe: String,
+    },
 }
 
 impl Args {
