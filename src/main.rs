@@ -7,6 +7,7 @@ mod config;
 mod llm;
 mod recipe;
 mod run;
+mod tools;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
