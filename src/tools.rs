@@ -1,9 +1,13 @@
 mod ls;
 
+use std::collections::HashMap;
+
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 pub use ls::*;
+
+pub type ToolInput = HashMap<String, Value>;
 
 pub trait Tool {
     fn definition(&self) -> ToolDefinition;
@@ -11,7 +15,7 @@ pub trait Tool {
     /// Executes the tool with the given input and returns a result.
     fn execute(
         &self,
-        input: &str,
+        input: ToolInput,
     ) -> Result<String, Box<dyn std::error::Error>>;
 }
 
