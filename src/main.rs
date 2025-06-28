@@ -1,4 +1,4 @@
-use crate::cli::{Args, Commands};
+use crate::cli::{Args, Commands, ConfigCommands, RecipeCommands};
 use clap::Parser;
 use log::info;
 
@@ -14,17 +14,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(command) = args.command() {
         match command {
-            Commands::ShowConfigPath => {
-                let config_path = config::get_configuration_file_path()?;
-                println!("{config_path}");
-
+            Commands::Config { command } => match command {
+                ConfigCommands::Show => {
+                    let config_path = config::get_configuration_file_path()?;
+                    println!("{config_path}");
+                    return Ok(());
+                }
+                ConfigCommands::Edit => {
+                    println!("...editing config...");
+                    return Ok(());
+                }
+                ConfigCommands::Validate => {
+                    println!("...validating config...");
+                    return Ok(());
+                }
+            },
+            Commands::Recipe { command } => {
+                match command {
+                    RecipeCommands::List => {
+                        println!("...listing recipes...");
+                    }
+                    RecipeCommands::Show { name } => {
+                        println!("...showing recipe: {name}...");
+                    }
+                    RecipeCommands::Create { name } => {
+                        println!("...creating recipe: {name}...");
+                    }
+                }
                 return Ok(());
-            }
-            Commands::Recipe => {
-                println!("...recipes...");
             }
             Commands::Run { recipe } => {
                 println!("...running recipe: {recipe}");
+                return Ok(());
             }
         }
     }

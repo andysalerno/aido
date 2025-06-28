@@ -26,14 +26,38 @@ pub struct Args {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Show the configuration file path
-    ShowConfigPath,
-    /// Recipe-related commands
-    Recipe,
-
-    Run {
-        recipe: String,
+    /// Configuration-related commands
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommands,
     },
+    /// Recipe-related commands
+    Recipe {
+        #[command(subcommand)]
+        command: RecipeCommands,
+    },
+    /// Run a recipe
+    Run { recipe: String },
+}
+
+#[derive(Subcommand)]
+pub enum ConfigCommands {
+    /// Show the configuration file path
+    Show,
+    /// Edit the configuration file
+    Edit,
+    /// Validate the configuration file
+    Validate,
+}
+
+#[derive(Subcommand)]
+pub enum RecipeCommands {
+    /// List available recipes
+    List,
+    /// Show recipe details
+    Show { name: String },
+    /// Create a new recipe
+    Create { name: String },
 }
 
 impl Args {
