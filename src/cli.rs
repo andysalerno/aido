@@ -10,6 +10,10 @@ pub struct Args {
     #[arg(short, long, global = true)]
     verbose: bool,
 
+    /// Print token usage after responding
+    #[arg(short, long, global = true)]
+    usage: bool,
+
     #[arg(short, long, global = true)]
     config_file: Option<String>,
 
@@ -47,5 +51,9 @@ impl Args {
 
     pub fn input(&self) -> Option<&str> {
         self.input.as_deref()
+    }
+
+    pub fn usage(&self) -> bool {
+        self.usage
     }
 }

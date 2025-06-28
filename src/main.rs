@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(input) = args.input() {
         info!("Input: {:?}", args.input());
-        run::run(config, input)?;
+        run::run(config, input, args.usage())?;
     } else {
         info!("No input file provided; all done.");
     }
