@@ -1,37 +1,12 @@
 mod ls;
 
-use std::collections::HashMap;
-
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+use serde_json::{Map, Value, json};
 
 pub use ls::*;
 
-pub type Parameters = serde_json::Value;
-
-#[derive(Clone, Serialize, Default, Debug, Deserialize, Eq, PartialEq)]
-pub struct ToolSchema {
-    pub name: String,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parameters: Option<serde_json::Value>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub strict: Option<bool>,
-}
-
 pub trait Tool {
-    /// Returns the name of the tool.
-    fn name(&self) -> &str;
-
-    /// Returns a description of the tool.
-    fn description(&self) -> &str;
-
-    fn parameters(&self) -> Option<Parameters> {
-        None
-    }
+    fn definition(&self) -> ToolDefinition;
 
     /// Executes the tool with the given input and returns a result.
     fn execute(
@@ -40,219 +15,205 @@ pub trait Tool {
     ) -> Result<String, Box<dyn std::error::Error>>;
 }
 
-pub fn get_tool_schema(tool: &dyn Tool) -> ToolSchema {
-    ToolSchema {
-        name: tool.name().to_string(),
-        description: Some(tool.description().to_string()),
-        parameters: tool.parameters(),
-        strict: None,
-    }
-}
-
-pub struct ParametersBuilder {
-    parameters: serde_json::Value,
-}
-
-pub enum ValueKind {
+#[derive(Debug, Clone, Copy)]
+pub enum ArgType {
     String,
     Number,
-    Bool,
-    Array,
+    Integer,
+    Boolean,
     Object,
+    Array,
 }
 
-impl ParametersBuilder {
-    pub fn new() -> Self {
-        Self { parameters: serde_json::Value::Object(serde_json::Map::new()) }
+impl ArgType {
+    fn as_str(self) -> &'static str {
+        match self {
+            ArgType::String => "string",
+            ArgType::Number => "number",
+            ArgType::Integer => "integer",
+            ArgType::Boolean => "boolean",
+            ArgType::Object => "object",
+            ArgType::Array => "array",
+        }
     }
+}
 
-    pub fn add_parameter(
-        mut self,
-        name: &str,
-        kind: ValueKind,
-        description: &str,
-    ) -> Self {
-        let value = match kind {
-            ValueKind::String => serde_json::Value::String(String::new()),
-            ValueKind::Number => {
-                serde_json::Value::Number(serde_json::Number::from(0))
-            }
-            ValueKind::Bool => serde_json::Value::Bool(false),
-            ValueKind::Array => serde_json::Value::Array(vec![]),
-            ValueKind::Object => {
-                serde_json::Value::Object(serde_json::Map::new())
-            }
-        };
+#[derive(Debug)]
+pub struct Arg {
+    name: String,
+    description: String,
+    kind: ArgType,
+    enum_vals: Option<Vec<String>>,
+    required: bool,
+}
 
-        self.parameters
-            .as_object_mut()
-            .unwrap()
-            .insert(name.to_string(), value);
+impl Arg {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            description: String::new(),
+            kind: ArgType::String,
+            enum_vals: None,
+            required: false,
+        }
+    }
+    pub fn description(mut self, text: impl Into<String>) -> Self {
+        self.description = text.into();
+        self
+    }
+    pub fn kind(mut self, kind: ArgType) -> Self {
+        self.kind = kind;
+        self
+    }
+    pub fn with_enum<I, S>(mut self, vals: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.enum_vals = Some(vals.into_iter().map(Into::into).collect());
+        self
+    }
+    pub fn required(mut self) -> Self {
+        self.required = true;
         self
     }
 }
 
-// 'tools' is a list of 'functions'
-// 'function' has a 'name', 'description', 'parameters'
-// 'parameters' is an object with 'type': 'object', 'properties', and 'required'
-// 'properties' is a map of parameter names to their definitions
-
-#[derive(Serialize, Debug)]
-struct OpenAITool {
-    r#type: &'static str, // "function"
-    function: OpenAIFunction,
-}
-
-impl OpenAITool {
-    fn new(function: OpenAIFunction) -> Self {
-        Self { r#type: "function", function }
-    }
-}
-
-#[derive(Serialize, Debug)]
-struct OpenAIFunction {
+pub struct ToolDefinition {
     name: String,
     description: String,
-    parameters: OpenAIParameters,
+    args: Vec<Arg>,
 }
 
-impl OpenAIFunction {
-    fn new(
-        name: String,
-        description: String,
-        parameters: OpenAIParameters,
-    ) -> Self {
-        Self { name, description, parameters }
+impl ToolDefinition {
+    pub fn new(name: String, description: String, args: Vec<Arg>) -> Self {
+        Self { name, description, args }
+    }
+
+    pub fn into_json_value(self) -> Value {
+        let mut props = Map::new();
+        let mut required = Vec::new();
+
+        for a in &self.args {
+            if a.required {
+                required.push(a.name.clone());
+            }
+            let mut entry = json!({
+                "type": a.kind.as_str(),
+                "description": a.description,
+            });
+            if let Some(vals) = &a.enum_vals {
+                entry
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("enum".to_string(), json!(vals));
+            }
+            props.insert(a.name.clone(), entry);
+        }
+
+        json!({
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": {
+                    "type": "object",
+                    "properties": props,
+                    "required": required
+                }
+            }
+        })
     }
 }
 
-#[derive(Serialize, Debug)]
-struct OpenAIParameters {
-    r#type: &'static str, // "object"
-    properties: HashMap<String, OpenAIParameterProperty>,
-    required: Vec<String>,
+#[derive(Debug)]
+pub struct ToolDefinitionBuilder {
+    name: String,
+    description: String,
+    args: Vec<Arg>,
 }
 
-impl OpenAIParameters {
-    fn new(
-        properties: HashMap<String, OpenAIParameterProperty>,
-        required: Vec<String>,
-    ) -> Self {
-        Self { r#type: "object", properties, required }
+impl ToolDefinitionBuilder {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            description: String::new(),
+            args: Vec::new(),
+        }
+    }
+    pub fn description(mut self, text: impl Into<String>) -> Self {
+        self.description = text.into();
+        self
+    }
+    pub fn arg(mut self, arg: Arg) -> Self {
+        self.args.push(arg);
+        self
+    }
+
+    /// Consumes the builder and returns a ToolDefinition
+    pub fn build(self) -> ToolDefinition {
+        ToolDefinition::new(self.name, self.description, self.args)
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-struct OpenAIParameterProperty {
-    r#type: String, // "string", "number", etc.
-    description: Option<String>,
-    enum_values: Option<Vec<String>>, // For enum types
+#[derive(Serialize)]
+pub struct ToolList {
+    tools: Vec<Value>,
 }
-
-// Example of a real http request:
-// curl https://api.openai.com/v1/chat/completions \
-// -H "Content-Type: application/json" \
-// -H "Authorization: Bearer $OPENAI_API_KEY" \
-// -d '{
-//   "model": "gpt-4.1",
-//   "messages": [
-//     {
-//       "role": "user",
-//       "content": "What is the weather like in Boston today?"
-//     }
-//   ],
-//   "tools": [
-//     {
-//       "type": "function",
-//       "function": {
-//         "name": "get_current_weather",
-//         "description": "Get the current weather in a given location",
-//         "parameters": {
-//           "type": "object",
-//           "properties": {
-//             "location": {
-//               "type": "string",
-//               "description": "The city and state, e.g. San Francisco, CA"
-//             },
-//             "unit": {
-//               "type": "string",
-//               "enum": ["celsius", "fahrenheit"]
-//             }
-//           },
-//           "required": ["location"]
-//         }
-//       }
-//     }
-//   ],
-//   "tool_choice": "auto"
-// }'
+impl ToolList {
+    pub fn new(tools: impl Into<Vec<Value>>) -> Self {
+        Self { tools: tools.into() }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // #[test]
+    #[test]
     fn test_tool_schema() {
+        let tool = ToolDefinitionBuilder::new("my_tool")
+            .description("some test tool")
+            .arg(
+                Arg::new("myArgument")
+                    .description("Some description of my argument")
+                    .kind(ArgType::String)
+                    .required(),
+            )
+            .arg(
+                Arg::new("myOtherArgument")
+                    .description("Some other argument")
+                    .kind(ArgType::Number),
+            )
+            .build();
+
         let expected_json = serde_json::json!({
-            "type": "object",
-            "properties": {
-                "myArgument": {
-                    "type": "string",
-                    "description": "Some description of my argument"
+            "type": "function",
+            "function": {
+                "name": "my_tool",
+                "description": "some test tool",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "myArgument": {
+                            "type": "string",
+                            "description": "Some description of my argument",
+                        },
+                        "myOtherArgument": {
+                            "type": "number",
+                            "description": "Some other argument"
+                        }
+                    },
+                    "required": [
+                        "myArgument"
+                    ]
                 }
-            },
-            "required": ["path"]
+            }
         });
 
-        let my_tool = OpenAITool::new(OpenAIFunction::new(
-            "myTool".into(),
-            "some tool description".into(),
-            OpenAIParameters::new(HashMap::new(), Vec::new()),
-        ));
+        let tool_str = serde_json::to_string(&tool.into_json_value()).unwrap();
+        let expected_str = serde_json::to_string(&expected_json).unwrap();
 
-        let my_tool = OpenAITool {
-            r#type: "function",
-            function: OpenAIFunction {
-                name: "ls".to_string(),
-                description: "List files in the current directory".to_string(),
-                parameters: OpenAIParameters::new(
-                    serde_json::json!({
-                        "path": {
-                            "type": "string",
-                            "description": "The path to list files in",
-                            "default": "."
-                        }
-                    })
-                    .as_object()
-                    .unwrap()
-                    .iter()
-                    .map(|(k, v)| {
-                        (
-                            k.clone(),
-                            OpenAIParameterProperty {
-                                r#type: v["type"]
-                                    .as_str()
-                                    .unwrap()
-                                    .to_string(),
-                                description: v["description"]
-                                    .as_str()
-                                    .map(|s| s.to_string()),
-                                enum_values: v["enum"].as_array().map(|a| {
-                                    a.iter()
-                                        .map(|v| {
-                                            v.as_str().unwrap().to_string()
-                                        })
-                                        .collect()
-                                }),
-                            },
-                        )
-                    })
-                    .collect(),
-                    vec!["path".to_string()],
-                ),
-            },
-        };
-
-        let serialized = serde_json::to_string(&my_tool).unwrap();
+        assert_eq!(tool_str, expected_str);
     }
 }
