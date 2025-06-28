@@ -60,3 +60,9 @@ There are dependencies in this project that would be ideal to remove over time.
 
 - async-openai
 - tokio (only needed to run async-openai)
+
+## To do
+
+- [ ] Rich text UI, possibly using Ratatui, rendering markdown
+- [ ] Recipes
+- [ ] MCP
