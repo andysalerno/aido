@@ -13,15 +13,18 @@ pub fn run(
     input: &str,
     print_usage: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let llm = llm::LlmClient::new(config.model_name, config.api_key, config.api_url);
+    let llm =
+        llm::LlmClient::new(config.model_name, config.api_key, config.api_url);
 
     let mut out = io::BufWriter::new(io::stdout().lock());
 
-    let response =
-        llm.get_chat_completion_streaming(&LlmRequest { text: input.into() }, |chunk| {
+    let response = llm.get_chat_completion_streaming(
+        &LlmRequest { text: input.into() },
+        |chunk| {
             write!(out, "{chunk}").unwrap();
             out.flush().unwrap();
-        })?;
+        },
+    )?;
 
     writeln!(out).unwrap();
     out.flush().unwrap();
