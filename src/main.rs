@@ -20,6 +20,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 return Ok(());
             }
+            Commands::Recipe => {
+                println!("...recipes...");
+            }
+            Commands::Run => {
+                println!("...running it...");
+            }
         }
     }
 

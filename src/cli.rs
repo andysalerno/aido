@@ -24,6 +24,10 @@ pub struct Args {
 pub enum Commands {
     /// Show the configuration file path
     ShowConfigPath,
+    /// Recipe-related commands
+    Recipe,
+
+    Run,
 }
 
 impl Args {
