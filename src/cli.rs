@@ -43,6 +43,8 @@ pub enum Commands {
 #[derive(Subcommand)]
 pub enum ConfigCommands {
     /// Show the configuration file path
+    ShowPath,
+    /// Show the configuration
     Show,
     /// Edit the configuration file
     Edit,

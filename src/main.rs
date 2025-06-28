@@ -12,10 +12,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let args = Args::parse();
 
+    let config = if let Some(config_file) = args.config_file() {
+        config::retrieve_from_path(config_file)?
+    } else {
+        config::retrieve()?
+    };
+
     if let Some(command) = args.command() {
         match command {
             Commands::Config { command } => match command {
                 ConfigCommands::Show => {
+                    println!("{config:?}");
+                    return Ok(());
+                }
+                ConfigCommands::ShowPath => {
                     let config_path = config::get_configuration_file_path()?;
                     println!("{config_path}");
                     return Ok(());
@@ -49,12 +59,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-
-    let config = if let Some(config_file) = args.config_file() {
-        config::retrieve_from_path(config_file)?
-    } else {
-        config::retrieve()?
-    };
 
     info!("Configuration loaded: {config:?}");
 
