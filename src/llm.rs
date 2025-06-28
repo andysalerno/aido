@@ -2,12 +2,13 @@ use async_openai::{
     Client,
     config::OpenAIConfig,
     types::{
-        ChatCompletionRequestMessage, ChatCompletionRequestUserMessage,
-        ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,
-        CreateAssistantRequestArgs, CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
+        ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
+        ChatCompletionRequestUserMessageContent, ChatCompletionStreamOptions,
+        CreateChatCompletionRequestArgs,
     },
 };
-use log::info;
+use futures_util::StreamExt;
+use log::{debug, error, info};
 use tokio::runtime::Runtime;
 
 pub struct LlmClient {
@@ -53,17 +54,39 @@ impl LlmClient {
         let request = CreateChatCompletionRequestArgs::default()
             .model(&self.model_name)
             .temperature(0.7)
+            .stream(true)
             .messages(vec![user_message(&request.text)?])
             .build()?;
 
-        let response = RT.block_on(async { self.client.chat().create(request).await })?;
+        let mut gradual_response = String::new();
 
-        info!("Response: {response:?}");
+        RT.block_on(async {
+            let gradual_response = &mut gradual_response;
+            let mut stream = self.client.chat().create_stream(request).await.unwrap();
 
-        let first_choice = response.choices.into_iter().next().unwrap();
+            while let Some(event) = stream.next().await {
+                match event {
+                    Ok(chunk) => {
+                        debug!("Received chunk: {chunk:?}");
+
+                        if let Some(delta) =
+                            chunk.choices.first().and_then(|c| c.delta.content.as_ref())
+                        {
+                            gradual_response.push_str(delta);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Error in stream: {e}");
+                        break;
+                    }
+                }
+            }
+        });
+
+        info!("Response: {gradual_response}");
 
         Ok(LlmResponse {
-            text: first_choice.message.content.unwrap(),
+            text: gradual_response,
         })
     }
 }
