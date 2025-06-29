@@ -44,32 +44,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Commands::Recipe { command } => {
                 match command {
                     RecipeCommands::List => {
-                        // recipe dir is in the parent dir of the config file
-                        let recipe_dir =
-                            std::path::Path::new(&config_file_path)
-                                .parent()
-                                .unwrap()
-                                .join("recipes");
-
-                        // List all recipes in the directory:
-                        let entries = std::fs::read_dir(recipe_dir)?;
-                        for entry in entries.flatten() {
-                            // Get the file extension of the entry:
-                            if entry.file_type()?.is_dir() {
-                                // Only print directories (recipes)
-                                // If you want to include files, remove this check
-                                continue;
-                            }
-
-                            if let Some(name) = entry.file_name().to_str()
-                                && name.ends_with(".recipe")
-                            {
-                                println!("- {name}");
-                            }
-                        }
+                        recipe::list(&config_file_path)?;
                     }
                     RecipeCommands::Show { name } => {
                         println!("...showing recipe: {name}...");
+                        let recipe_dir =
+                            recipe::get_recipes_dir(&config_file_path);
+                        let recipe = recipe::get(&recipe_dir, name)?;
+
+                        println!("{recipe}");
                     }
                     RecipeCommands::Create { name } => {
                         println!("...creating recipe: {name}...");
@@ -77,10 +60,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     RecipeCommands::ShowDir => {
                         // recipe dir is in the parent dir of the config file
                         let recipe_dir =
-                            std::path::Path::new(&config_file_path)
-                                .parent()
-                                .unwrap()
-                                .join("recipes");
+                            recipe::get_recipes_dir(&config_file_path);
                         let recipe_dir = recipe_dir.to_string_lossy();
 
                         println!("{recipe_dir}");
