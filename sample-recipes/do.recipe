@@ -1,6 +1,6 @@
 ----
 name: do
-allowed_tools: []
+allowed_tools: ['ls']
 ----
 You are a command-line assistant.
 

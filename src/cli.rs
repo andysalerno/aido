@@ -37,7 +37,10 @@ pub enum Commands {
         command: RecipeCommands,
     },
     /// Run a recipe
-    Run { recipe: String },
+    Run {
+        /// Name of the recipe to run
+        recipe: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -56,8 +59,13 @@ pub enum ConfigCommands {
 pub enum RecipeCommands {
     /// List available recipes
     List,
+
     /// Show recipe details
     Show { name: String },
+
+    /// Show the path of the directory of recipes
+    ShowDir,
+
     /// Create a new recipe
     Create { name: String },
 }

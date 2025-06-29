@@ -13,11 +13,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let args = Args::parse();
 
-    let config = if let Some(config_file) = args.config_file() {
-        config::retrieve_from_path(config_file)?
+    let config_file_path = if let Some(config_file) = args.config_file() {
+        config_file.to_string()
     } else {
-        config::retrieve()?
+        config::get_configuration_file_path()?
     };
+
+    let config = config::retrieve_from_path(&config_file_path)?;
 
     if let Some(command) = args.command() {
         match command {
@@ -27,8 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return Ok(());
                 }
                 ConfigCommands::ShowPath => {
-                    let config_path = config::get_configuration_file_path()?;
-                    println!("{config_path}");
+                    println!("{config_file_path}");
                     return Ok(());
                 }
                 ConfigCommands::Edit => {
@@ -43,13 +44,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Commands::Recipe { command } => {
                 match command {
                     RecipeCommands::List => {
-                        println!("...listing recipes...");
+                        // recipe dir is in the parent dir of the config file
+                        let recipe_dir =
+                            std::path::Path::new(&config_file_path)
+                                .parent()
+                                .unwrap()
+                                .join("recipes");
+
+                        // List all recipes in the directory:
+                        let entries = std::fs::read_dir(recipe_dir)?;
+                        for entry in entries.flatten() {
+                            // Get the file extension of the entry:
+                            if entry.file_type()?.is_dir() {
+                                // Only print directories (recipes)
+                                // If you want to include files, remove this check
+                                continue;
+                            }
+
+                            if let Some(name) = entry.file_name().to_str()
+                                && name.ends_with(".recipe")
+                            {
+                                println!("- {name}");
+                            }
+                        }
                     }
                     RecipeCommands::Show { name } => {
                         println!("...showing recipe: {name}...");
                     }
                     RecipeCommands::Create { name } => {
                         println!("...creating recipe: {name}...");
+                    }
+                    RecipeCommands::ShowDir => {
+                        // recipe dir is in the parent dir of the config file
+                        let recipe_dir =
+                            std::path::Path::new(&config_file_path)
+                                .parent()
+                                .unwrap()
+                                .join("recipes");
+                        let recipe_dir = recipe_dir.to_string_lossy();
+
+                        println!("{recipe_dir}");
                     }
                 }
                 return Ok(());
