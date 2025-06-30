@@ -111,6 +111,16 @@ mod tests {
     #[test]
     fn test_recipe_parsing_2() {
         let content =
+            "----\ntitle: Test Recipe\n-----\nThis is the body of the recipe.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "title: Test Recipe");
+        assert_eq!(recipe.body, "This is the body of the recipe.");
+    }
+
+    #[test]
+    fn test_recipe_parsing_2b() {
+        let content =
             "---\ntitle: Test Recipe\n-----\nThis is the body of the recipe.";
         let recipe = super::parse_recipe(content).unwrap();
 
@@ -128,5 +138,14 @@ mod tests {
             recipe.body,
             "---\ntitle: Test Recipe\nDoes not start on new line-----\nThis is the body of the recipe."
         );
+    }
+
+    #[test]
+    fn test_recipe_parsing_4() {
+        let content = "---\ntitle: Test Recipe\nanotherParam: some other value\n-----\nThis is the body of the recipe.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "title: Test Recipe");
+        assert_eq!(recipe.body, "This is the body of the recipe.");
     }
 }
