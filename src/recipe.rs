@@ -58,8 +58,8 @@ fn parse_recipe(content: &str) -> Result<Recipe, Box<dyn std::error::Error>> {
     // Regex pattern to match header delimiters (3 or more dashes) at the start of the document
     // The pattern captures:
     // 1. Opening delimiter (3+ dashes) at the very beginning
-    // 2. Header content (non-greedy match)
-    // 3. Closing delimiter (same number of dashes as opening)
+    // 2. Header content (non-greedy match, including newlines)
+    // 3. Closing delimiter (3+ dashes)
     // 4. Remaining body content
     let header_regex =
         Regex::new(r"^(-{3,})\s*\n(.*?)\n(-{3,})\s*\n(.*)$").unwrap();
@@ -145,7 +145,22 @@ mod tests {
         let content = "---\ntitle: Test Recipe\nanotherParam: some other value\n-----\nThis is the body of the recipe.";
         let recipe = super::parse_recipe(content).unwrap();
 
-        assert_eq!(recipe.header, "title: Test Recipe");
+        assert_eq!(
+            recipe.header,
+            "title: Test Recipe\nanotherParam: some other value"
+        );
         assert_eq!(recipe.body, "This is the body of the recipe.");
+    }
+
+    #[test]
+    fn test_recipe_parsing_5() {
+        let content = "----\nname: do\nallowed_tools: ['ls']\n----\nYou are a command-line assistant.\n\nThe user will request you to do something in their command line environment.\n\nYour goal is to respond with the command they should run.\n\n## Examples\n\n<example_1>\nuser: please untar photos.tar.gz\nassistant: tar -xzf archive.tar.gz\n</example_1>\n\n<example_2>\nuser: please untar the file\nassistant: <executes tool `ls *.tar.gz` to see what .tar.gz file exists in the current directory>\ntool: my_file.tar.gz\nassistant: tar -xzf my_file.tar.gz\n</example_2>";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "name: do\nallowed_tools: ['ls']");
+        assert_eq!(
+            recipe.body,
+            "You are a command-line assistant.\n\nThe user will request you to do something in their command line environment.\n\nYour goal is to respond with the command they should run.\n\n## Examples\n\n<example_1>\nuser: please untar photos.tar.gz\nassistant: tar -xzf archive.tar.gz\n</example_1>\n\n<example_2>\nuser: please untar the file\nassistant: <executes tool `ls *.tar.gz` to see what .tar.gz file exists in the current directory>\ntool: my_file.tar.gz\nassistant: tar -xzf my_file.tar.gz\n</example_2>"
+        );
     }
 }
