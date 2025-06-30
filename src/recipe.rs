@@ -188,10 +188,7 @@ mod tests {
         let content = "---\nname: Test Recipe\nanotherParam: some other value\n-----\nThis is the body of the recipe.";
         let recipe = super::parse_recipe(content).unwrap();
 
-        assert_eq!(
-            recipe.header.name(),
-            "Test Recipe\nanotherParam: some other value"
-        );
+        assert_eq!(recipe.header.name(), "Test Recipe");
         assert_eq!(recipe.body, "This is the body of the recipe.");
     }
 
@@ -200,7 +197,7 @@ mod tests {
         let content = "----\nname: do\nallowed_tools: ['ls']\n----\nYou are a command-line assistant.\n\nThe user will request you to do something in their command line environment.\n\nYour goal is to respond with the command they should run.\n\n## Examples\n\n<example_1>\nuser: please untar photos.tar.gz\nassistant: tar -xzf archive.tar.gz\n</example_1>\n\n<example_2>\nuser: please untar the file\nassistant: <executes tool `ls *.tar.gz` to see what .tar.gz file exists in the current directory>\ntool: my_file.tar.gz\nassistant: tar -xzf my_file.tar.gz\n</example_2>";
         let recipe = super::parse_recipe(content).unwrap();
 
-        assert_eq!(recipe.header.name(), "do\nallowed_tools: ['ls']");
+        assert_eq!(recipe.header.name(), "do");
         assert_eq!(
             recipe.body,
             "You are a command-line assistant.\n\nThe user will request you to do something in their command line environment.\n\nYour goal is to respond with the command they should run.\n\n## Examples\n\n<example_1>\nuser: please untar photos.tar.gz\nassistant: tar -xzf archive.tar.gz\n</example_1>\n\n<example_2>\nuser: please untar the file\nassistant: <executes tool `ls *.tar.gz` to see what .tar.gz file exists in the current directory>\ntool: my_file.tar.gz\nassistant: tar -xzf my_file.tar.gz\n</example_2>"
@@ -306,10 +303,7 @@ mod tests {
         let content = "---\nname: complex recipe\nauthor: test\nversion: 1.0\ntags:\n  - utility\n  - command-line\noptions:\n  verbose: true\n  timeout: 30\n---\nThis is a recipe with a complex YAML header.";
         let recipe = super::parse_recipe(content).unwrap();
 
-        assert_eq!(
-            recipe.header.name(),
-            "complex recipe\nauthor: test\nversion: 1.0\ntags:\n  - utility\n  - command-line\noptions:\n  verbose: true\n  timeout: 30"
-        );
+        assert_eq!(recipe.header.name(), "complex recipe");
         assert_eq!(
             recipe.body,
             "This is a recipe with a complex YAML header."
@@ -321,10 +315,7 @@ mod tests {
         let content = "---\nname: My Recipe\ndescription: This has -- dashes in it\ncommand: ls -la\n---\nBody content here.";
         let recipe = super::parse_recipe(content).unwrap();
 
-        assert_eq!(
-            recipe.header.name(),
-            "My Recipe\ndescription: This has -- dashes in it\ncommand: ls -la"
-        );
+        assert_eq!(recipe.header.name(), "My Recipe");
         assert_eq!(recipe.body, "Body content here.");
     }
 
@@ -333,7 +324,7 @@ mod tests {
         let content = "---\na\n---\nb";
         let recipe = super::parse_recipe(content).unwrap();
 
-        assert_eq!(recipe.header.name(), "a");
+        assert_eq!(recipe.header.name(), "");
         assert_eq!(recipe.body, "b");
     }
 
@@ -342,7 +333,7 @@ mod tests {
         let content = "---\nname: 测试食谱\nauthor: José García\n---\nThis recipe contains unicode: café, naïve, 中文";
         let recipe = super::parse_recipe(content).unwrap();
 
-        assert_eq!(recipe.header.name(), "测试食谱\nauthor: José García");
+        assert_eq!(recipe.header.name(), "测试食谱");
         assert_eq!(
             recipe.body,
             "This recipe contains unicode: café, naïve, 中文"
@@ -354,10 +345,7 @@ mod tests {
         let content = "---\nname: Test\ndescription: |\n  This is a multiline\n  description that spans\n  multiple lines\n---\nBody content.";
         let recipe = super::parse_recipe(content).unwrap();
 
-        assert_eq!(
-            recipe.header.name(),
-            "Test\ndescription: |\n  This is a multiline\n  description that spans\n  multiple lines"
-        );
+        assert_eq!(recipe.header.name(), "Test");
         assert_eq!(recipe.body, "Body content.");
     }
 }
