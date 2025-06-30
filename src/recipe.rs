@@ -5,10 +5,47 @@ use log::info;
 #[derive(Debug, Clone)]
 pub struct Recipe {
     /// The yaml frontmatter header of the recipe
-    header: String,
+    header: Header,
 
     /// The body of the recipe
     body: String,
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct Header {
+    name: String,
+
+    allowed_tools: Vec<String>,
+}
+
+impl Header {
+    fn parse(content: &str) -> Self {
+        let mut name = String::new();
+        let mut allowed_tools = Vec::new();
+
+        for line in content.lines() {
+            if line.starts_with("name:") {
+                name = line.strip_prefix("name:").unwrap()[5..]
+                    .trim()
+                    .to_string();
+            } else if line.starts_with("allowed_tools:") {
+                allowed_tools = line
+                    .strip_prefix("allowed_tools:")
+                    .unwrap()
+                    .trim()
+                    .trim_matches(|c| c == '[' || c == ']')
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .collect();
+            }
+        }
+
+        Self { name, allowed_tools }
+    }
+
+    fn empty() -> Self {
+        Self::default()
+    }
 }
 
 /// Lists all available recipes in the recipes directory
@@ -65,13 +102,13 @@ fn parse_recipe(content: &str) -> Result<Recipe, Box<dyn std::error::Error>> {
         Regex::new(r"(?s)^(-{3,})\s*\n(.*?)\n(-{3,})\s*\n(.*)$").unwrap();
 
     header_regex.captures(content).map_or_else(
-        || Ok(Recipe { header: String::new(), body: content.to_string() }),
+        || Ok(Recipe { header: Header::empty(), body: content.to_string() }),
         |captures| {
             let header = captures.get(2).unwrap().as_str();
             let body = captures.get(4).unwrap().as_str();
 
             Ok(Recipe {
-                header: header.to_string(),
+                header: Header::parse(header),
                 body: body.trim().to_string(),
             })
         },
