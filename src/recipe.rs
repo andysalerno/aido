@@ -1,5 +1,17 @@
 use std::path::Path;
 
+use log::info;
+
+#[derive(Debug, Clone)]
+pub struct Recipe {
+    /// The yaml frontmatter header of the recipe
+    header: String,
+
+    /// The body of the recipe
+    body: String,
+}
+
+/// Lists all available recipes in the recipes directory
 pub fn list(config_file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     // recipe dir is in the parent dir of the config file
     let recipe_dir = get_recipes_dir(config_file_path);
@@ -18,10 +30,11 @@ pub fn list(config_file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // todo - this should obviously return the recipes, not just print them
     Ok(())
 }
 
-pub fn get(
+pub fn get_content(
     recipes_dir: &Path,
     name: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
@@ -35,6 +48,85 @@ pub fn get(
     Ok(content)
 }
 
+fn parse_recipe(content: &str) -> Result<Recipe, Box<dyn std::error::Error>> {
+    use regex::Regex;
+
+    if content.trim().is_empty() {
+        return Err("Recipe content is empty".into());
+    }
+
+    // Regex pattern to match header delimiters (3 or more dashes) at the start of the document
+    // The pattern captures:
+    // 1. Opening delimiter (3+ dashes) at the very beginning
+    // 2. Header content (non-greedy match)
+    // 3. Closing delimiter (same number of dashes as opening)
+    // 4. Remaining body content
+    let header_regex =
+        Regex::new(r"^(-{3,})\s*\n(.*?)\n(-{3,})\s*\n(.*)$").unwrap();
+
+    header_regex.captures(content).map_or_else(
+        || Ok(Recipe { header: String::new(), body: content.to_string() }),
+        |captures| {
+            let header = captures.get(2).unwrap().as_str();
+            let body = captures.get(4).unwrap().as_str();
+
+            Ok(Recipe {
+                header: header.to_string(),
+                body: body.trim().to_string(),
+            })
+        },
+    )
+}
+
+pub fn get(
+    recipes_dir: &Path,
+    name: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let content = get_content(recipes_dir, name)?;
+    let recipe = parse_recipe(&content)?;
+
+    info!("Retrieved recipe: {recipe:?}");
+
+    // Return the body of the recipe
+    Ok(recipe.body)
+}
+
 pub fn get_recipes_dir(config_file_path: &str) -> std::path::PathBuf {
     std::path::Path::new(config_file_path).parent().unwrap().join("recipes")
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_recipe_parsing_1() {
+        let content =
+            "---\ntitle: Test Recipe\n---\nThis is the body of the recipe.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "title: Test Recipe");
+        assert_eq!(recipe.body, "This is the body of the recipe.");
+    }
+
+    #[test]
+    fn test_recipe_parsing_2() {
+        let content =
+            "---\ntitle: Test Recipe\n-----\nThis is the body of the recipe.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "title: Test Recipe");
+        assert_eq!(recipe.body, "This is the body of the recipe.");
+    }
+
+    #[test]
+    fn test_recipe_parsing_3() {
+        let content = "---\ntitle: Test Recipe\nDoes not start on new line-----\nThis is the body of the recipe.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "");
+        assert_eq!(
+            recipe.body,
+            "---\ntitle: Test Recipe\nDoes not start on new line-----\nThis is the body of the recipe."
+        );
+    }
 }

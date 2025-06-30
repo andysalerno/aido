@@ -50,9 +50,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("...showing recipe: {name}...");
                         let recipe_dir =
                             recipe::get_recipes_dir(&config_file_path);
-                        let recipe = recipe::get(&recipe_dir, name)?;
+                        let recipe = recipe::get_content(&recipe_dir, name)?;
 
                         println!("{recipe}");
+                        let _ = recipe::get(&recipe_dir, name)?;
                     }
                     RecipeCommands::Create { name } => {
                         println!("...creating recipe: {name}...");
