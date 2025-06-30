@@ -62,7 +62,7 @@ fn parse_recipe(content: &str) -> Result<Recipe, Box<dyn std::error::Error>> {
     // 3. Closing delimiter (3+ dashes)
     // 4. Remaining body content
     let header_regex =
-        Regex::new(r"^(-{3,})\s*\n(.*?)\n(-{3,})\s*\n(.*)$").unwrap();
+        Regex::new(r"(?s)^(-{3,})\s*\n(.*?)\n(-{3,})\s*\n(.*)$").unwrap();
 
     header_regex.captures(content).map_or_else(
         || Ok(Recipe { header: String::new(), body: content.to_string() }),
