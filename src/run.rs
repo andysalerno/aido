@@ -1,4 +1,6 @@
-use std::io::Write;
+use std::{io::Write, path::Path};
+
+use log::info;
 
 use crate::{
     config::Config,
@@ -34,4 +36,17 @@ pub fn run(
     out.flush().unwrap();
 
     Ok(())
+}
+
+pub fn run_recipe(
+    config: Config,
+    recipes_dir: &Path,
+    recipe_name: &str,
+    print_usage: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let recipe = crate::recipe::get(recipes_dir, recipe_name)?;
+
+    info!("Running recipe: {}", recipe.header().name());
+
+    run(config, recipe.body(), print_usage)
 }

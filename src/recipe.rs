@@ -11,6 +11,16 @@ pub struct Recipe {
     body: String,
 }
 
+impl Recipe {
+    pub fn header(&self) -> &Header {
+        &self.header
+    }
+
+    pub fn body(&self) -> &str {
+        &self.body
+    }
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct Header {
     name: String,
@@ -91,6 +101,23 @@ pub fn get_content(
     Ok(content)
 }
 
+pub fn get(
+    recipes_dir: &Path,
+    name: &str,
+) -> Result<Recipe, Box<dyn std::error::Error>> {
+    let content = get_content(recipes_dir, name)?;
+    let recipe = parse_recipe(&content)?;
+
+    info!("Retrieved recipe: {recipe:?}");
+
+    // Return the body of the recipe
+    Ok(recipe)
+}
+
+pub fn get_recipes_dir(config_file_path: &str) -> std::path::PathBuf {
+    std::path::Path::new(config_file_path).parent().unwrap().join("recipes")
+}
+
 fn parse_recipe(content: &str) -> Result<Recipe, Box<dyn std::error::Error>> {
     use regex::Regex;
 
@@ -104,6 +131,7 @@ fn parse_recipe(content: &str) -> Result<Recipe, Box<dyn std::error::Error>> {
     // 2. Header content (non-greedy match, including newlines)
     // 3. Closing delimiter (3+ dashes)
     // 4. Remaining body content
+    // TODO: compile this once and reuse it
     let header_regex =
         Regex::new(r"(?s)^(-{3,})\s*\n(.*?)\n(-{3,})\s*\n(.*)$").unwrap();
 
@@ -119,23 +147,6 @@ fn parse_recipe(content: &str) -> Result<Recipe, Box<dyn std::error::Error>> {
             })
         },
     )
-}
-
-pub fn get(
-    recipes_dir: &Path,
-    name: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let content = get_content(recipes_dir, name)?;
-    let recipe = parse_recipe(&content)?;
-
-    info!("Retrieved recipe: {recipe:?}");
-
-    // Return the body of the recipe
-    Ok(recipe.body)
-}
-
-pub fn get_recipes_dir(config_file_path: &str) -> std::path::PathBuf {
-    std::path::Path::new(config_file_path).parent().unwrap().join("recipes")
 }
 
 #[cfg(test)]

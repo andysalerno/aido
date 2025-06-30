@@ -70,7 +70,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok(());
             }
             Commands::Run { recipe } => {
-                println!("...running recipe: {recipe}");
+                let recipes_dir = recipe::get_recipes_dir(&config_file_path);
+                run::run_recipe(config, &recipes_dir, recipe, args.usage())?;
+
                 return Ok(());
             }
         }
