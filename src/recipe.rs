@@ -163,4 +163,157 @@ mod tests {
             "You are a command-line assistant.\n\nThe user will request you to do something in their command line environment.\n\nYour goal is to respond with the command they should run.\n\n## Examples\n\n<example_1>\nuser: please untar photos.tar.gz\nassistant: tar -xzf archive.tar.gz\n</example_1>\n\n<example_2>\nuser: please untar the file\nassistant: <executes tool `ls *.tar.gz` to see what .tar.gz file exists in the current directory>\ntool: my_file.tar.gz\nassistant: tar -xzf my_file.tar.gz\n</example_2>"
         );
     }
+
+    #[test]
+    fn test_recipe_parsing_no_header() {
+        let content = "This is just a plain recipe body with no header.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "");
+        assert_eq!(
+            recipe.body,
+            "This is just a plain recipe body with no header."
+        );
+    }
+
+    #[test]
+    fn test_recipe_parsing_empty_header() {
+        let content = "---\n\n---\nThis is the body of the recipe.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "");
+        assert_eq!(recipe.body, "This is the body of the recipe.");
+    }
+
+    #[test]
+    fn test_recipe_parsing_empty_body() {
+        let content = "---\ntitle: Test Recipe\n---\n";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "title: Test Recipe");
+        assert_eq!(recipe.body, "");
+    }
+
+    #[test]
+    fn test_recipe_parsing_whitespace_only_body() {
+        let content = "---\ntitle: Test Recipe\n---\n   \n  \t  \n";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "title: Test Recipe");
+        assert_eq!(recipe.body, "");
+    }
+
+    #[test]
+    fn test_recipe_parsing_only_opening_delimiter() {
+        let content =
+            "---\ntitle: Test Recipe\nThis should all be treated as body";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "");
+        assert_eq!(
+            recipe.body,
+            "---\ntitle: Test Recipe\nThis should all be treated as body"
+        );
+    }
+
+    #[test]
+    fn test_recipe_parsing_mismatched_delimiters() {
+        let content = "---\ntitle: Test Recipe\n----\nThis is the body.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "title: Test Recipe");
+        assert_eq!(recipe.body, "This is the body.");
+    }
+
+    #[test]
+    fn test_recipe_parsing_many_dashes() {
+        let content =
+            "----------\ntitle: Test Recipe\n----------\nThis is the body.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "title: Test Recipe");
+        assert_eq!(recipe.body, "This is the body.");
+    }
+
+    #[test]
+    fn test_recipe_parsing_delimiters_with_extra_whitespace() {
+        let content =
+            "---   \n  \ntitle: Test Recipe\n  \n---  \t \nThis is the body.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "  \ntitle: Test Recipe\n  ");
+        assert_eq!(recipe.body, "This is the body.");
+    }
+
+    #[test]
+    fn test_recipe_parsing_body_with_similar_delimiters() {
+        let content = "---\ntitle: Test Recipe\n---\nHere's some content.\n\n---\nThis looks like a delimiter but it's in the body.\n---\n\nMore content.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "title: Test Recipe");
+        assert_eq!(
+            recipe.body,
+            "Here's some content.\n\n---\nThis looks like a delimiter but it's in the body.\n---\n\nMore content."
+        );
+    }
+
+    #[test]
+    fn test_recipe_parsing_complex_yaml_header() {
+        let content = "---\nname: complex recipe\nauthor: test\nversion: 1.0\ntags:\n  - utility\n  - command-line\noptions:\n  verbose: true\n  timeout: 30\n---\nThis is a recipe with a complex YAML header.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(
+            recipe.header,
+            "name: complex recipe\nauthor: test\nversion: 1.0\ntags:\n  - utility\n  - command-line\noptions:\n  verbose: true\n  timeout: 30"
+        );
+        assert_eq!(
+            recipe.body,
+            "This is a recipe with a complex YAML header."
+        );
+    }
+
+    #[test]
+    fn test_recipe_parsing_header_with_dashes_in_content() {
+        let content = "---\ntitle: My Recipe\ndescription: This has -- dashes in it\ncommand: ls -la\n---\nBody content here.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(
+            recipe.header,
+            "title: My Recipe\ndescription: This has -- dashes in it\ncommand: ls -la"
+        );
+        assert_eq!(recipe.body, "Body content here.");
+    }
+
+    #[test]
+    fn test_recipe_parsing_minimal_three_dashes() {
+        let content = "---\na\n---\nb";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "a");
+        assert_eq!(recipe.body, "b");
+    }
+
+    #[test]
+    fn test_recipe_parsing_unicode_content() {
+        let content = "---\ntitle: 测试食谱\nauthor: José García\n---\nThis recipe contains unicode: café, naïve, 中文";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header, "title: 测试食谱\nauthor: José García");
+        assert_eq!(
+            recipe.body,
+            "This recipe contains unicode: café, naïve, 中文"
+        );
+    }
+
+    #[test]
+    fn test_recipe_parsing_multiline_strings_in_header() {
+        let content = "---\ntitle: Test\ndescription: |\n  This is a multiline\n  description that spans\n  multiple lines\n---\nBody content.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(
+            recipe.header,
+            "title: Test\ndescription: |\n  This is a multiline\n  description that spans\n  multiple lines"
+        );
+        assert_eq!(recipe.body, "Body content.");
+    }
 }
