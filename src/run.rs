@@ -1,16 +1,16 @@
-use std::{io::Write, path::Path};
+use std::{io::Write, path::Path, vec};
 
 use log::info;
 
 use crate::{
     config::Config,
-    llm::{self, LlmRequest},
+    llm::{self, LlmRequest, Message},
 };
 use std::io::{self};
 
 pub fn run(
     config: Config,
-    input: &str,
+    messages: Vec<Message>,
     print_usage: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let llm =
@@ -19,7 +19,7 @@ pub fn run(
     let mut out = io::BufWriter::new(io::stdout().lock());
 
     let response = llm.get_chat_completion_streaming(
-        &LlmRequest { text: input.into() },
+        &LlmRequest::new(messages),
         |chunk| {
             write!(out, "{chunk}").unwrap();
             out.flush().unwrap();
@@ -42,11 +42,22 @@ pub fn run_recipe(
     config: Config,
     recipes_dir: &Path,
     recipe_name: &str,
+    user_message: Option<String>,
     print_usage: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let recipe = crate::recipe::get(recipes_dir, recipe_name)?;
 
     info!("Running recipe: {}", recipe.header().name());
 
-    run(config, recipe.body(), print_usage)
+    let messages = {
+        let mut messages = vec![Message::System(recipe.body().to_owned())];
+
+        if let Some(user_msg) = user_message {
+            messages.push(Message::User(user_msg));
+        }
+
+        messages
+    };
+
+    run(config, messages, print_usage)
 }

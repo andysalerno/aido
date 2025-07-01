@@ -1,4 +1,9 @@
-use crate::cli::{Args, Commands, ConfigCommands, RecipeCommands};
+use std::vec;
+
+use crate::{
+    cli::{Args, Commands, ConfigCommands, RecipeCommands},
+    llm::Message,
+};
 use clap::Parser;
 use log::info;
 
@@ -69,9 +74,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 return Ok(());
             }
-            Commands::Run { recipe } => {
+            Commands::Run { recipe, user_message } => {
                 let recipes_dir = recipe::get_recipes_dir(&config_file_path);
-                run::run_recipe(config, &recipes_dir, recipe, args.usage())?;
+                run::run_recipe(
+                    config,
+                    &recipes_dir,
+                    recipe,
+                    user_message.to_owned(),
+                    args.usage(),
+                )?;
 
                 return Ok(());
             }
@@ -82,7 +93,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(input) = args.input() {
         info!("Input: {:?}", args.input());
-        run::run(config, input, args.usage())?;
+        let messages = vec![Message::User(input.to_string())];
+        run::run(config, messages, args.usage())?;
     } else {
         info!("No input file provided; all done.");
     }

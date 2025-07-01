@@ -2,7 +2,13 @@ use async_openai::{
     Client,
     config::OpenAIConfig,
     types::{
-        ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
+        ChatCompletionRequestAssistantMessageArgs,
+        ChatCompletionRequestAssistantMessageContent,
+        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
+        ChatCompletionRequestSystemMessageContent,
+        ChatCompletionRequestToolMessageArgs,
+        ChatCompletionRequestToolMessageContent,
+        ChatCompletionRequestUserMessageArgs,
         ChatCompletionRequestUserMessageContent, ChatCompletionStreamOptions,
         CreateChatCompletionRequestArgs,
     },
@@ -16,8 +22,72 @@ pub struct LlmClient {
     model_name: String,
 }
 
+#[derive(Debug, Clone, Default)]
 pub struct LlmRequest {
-    pub text: String,
+    messages: Vec<Message>,
+}
+
+impl LlmRequest {
+    pub fn new(messages: Vec<Message>) -> Self {
+        Self { messages }
+    }
+
+    pub fn messages(&self) -> &[Message] {
+        &self.messages
+    }
+}
+
+impl Into<ChatCompletionRequestMessage> for Message {
+    fn into(self) -> ChatCompletionRequestMessage {
+        match self {
+            Message::User(content) => {
+                ChatCompletionRequestUserMessageArgs::default()
+                    .content(ChatCompletionRequestUserMessageContent::Text(
+                        content,
+                    ))
+                    .build()
+                    .unwrap()
+                    .into()
+            }
+            Message::Assistant(content) => {
+                ChatCompletionRequestAssistantMessageArgs::default()
+                    .content(
+                        ChatCompletionRequestAssistantMessageContent::Text(
+                            content,
+                        ),
+                    )
+                    .build()
+                    .unwrap()
+                    .into()
+            }
+            Message::System(content) => {
+                ChatCompletionRequestSystemMessageArgs::default()
+                    .content(ChatCompletionRequestSystemMessageContent::Text(
+                        content,
+                    ))
+                    .build()
+                    .unwrap()
+                    .into()
+            }
+            Message::Tool(content) => {
+                ChatCompletionRequestToolMessageArgs::default()
+                    .content(ChatCompletionRequestToolMessageContent::Text(
+                        content,
+                    ))
+                    .build()
+                    .unwrap()
+                    .into()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    User(String),
+    Assistant(String),
+    System(String),
+    Tool(String),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -92,6 +162,13 @@ impl LlmClient {
         request: &LlmRequest,
         mut action_per_chunk: impl FnMut(&str),
     ) -> Result<LlmResponse, Box<dyn std::error::Error>> {
+        let messages = request
+            .messages()
+            .iter()
+            .cloned()
+            .map(|msg| msg.into())
+            .collect::<Vec<ChatCompletionRequestMessage>>();
+
         let request = CreateChatCompletionRequestArgs::default()
             .model(&self.model_name)
             .temperature(0.7)
@@ -99,7 +176,7 @@ impl LlmClient {
             .stream_options(ChatCompletionStreamOptions {
                 include_usage: true,
             })
-            .messages(vec![user_message(&request.text)?])
+            .messages(messages)
             .build()?;
 
         let mut gradual_response = String::new();

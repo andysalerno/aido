@@ -40,6 +40,9 @@ pub enum Commands {
     Run {
         /// Name of the recipe to run
         recipe: String,
+
+        /// An optional user message to include, if required by the recipe
+        user_message: Option<String>,
     },
 }
 
