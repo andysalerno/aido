@@ -14,7 +14,7 @@ use async_openai::{
     },
 };
 use futures_util::StreamExt;
-use log::{debug, error};
+use log::{debug, error, trace};
 use tokio::runtime::Runtime;
 
 pub struct LlmClient {
@@ -179,6 +179,11 @@ impl LlmClient {
             .messages(messages)
             .build()?;
 
+        if log::log_enabled!(log::Level::Debug) {
+            let json = serde_json::to_string(&request)?;
+            debug!("{json}");
+        }
+
         let mut gradual_response = String::new();
         let mut usage = Usage::default();
 
@@ -190,7 +195,7 @@ impl LlmClient {
             while let Some(event) = stream.next().await {
                 match event {
                     Ok(chunk) => {
-                        debug!("Received chunk: {chunk:?}");
+                        trace!("Received chunk: {chunk:?}");
 
                         if let Some(delta) = chunk
                             .choices
