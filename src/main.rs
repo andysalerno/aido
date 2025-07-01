@@ -3,6 +3,7 @@ use std::vec;
 use crate::{
     cli::{Args, Commands, ConfigCommands, RecipeCommands},
     llm::Message,
+    tools::Tool,
 };
 use clap::Parser;
 use log::info;
@@ -23,6 +24,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         config::get_configuration_file_path()?
     };
+
+    let tools: Vec<Box<dyn Tool>> = vec![Box::new(tools::Ls)];
 
     let config = config::retrieve_from_path(&config_file_path)?;
 
@@ -80,6 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &recipes_dir,
                     recipe,
                     user_message.to_owned(),
+                    tools,
                     args.usage(),
                 )?;
 
@@ -93,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(input) = args.input() {
         info!("Input: {:?}", args.input());
         let messages = vec![Message::User(input.to_string())];
-        run::run(config, messages, args.usage())?;
+        run::run(config, messages, tools, args.usage())?;
     } else {
         info!("No input file provided; all done.");
     }

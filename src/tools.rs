@@ -1,5 +1,8 @@
 mod ls;
 
+pub use ls::Ls;
+
+use core::fmt;
 use std::collections::HashMap;
 
 use serde::Serialize;
@@ -15,6 +18,15 @@ pub trait Tool {
         &self,
         input: ToolInput,
     ) -> Result<String, Box<dyn std::error::Error>>;
+}
+
+impl fmt::Debug for dyn Tool {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Tool")
+            .field("name", &self.definition().name)
+            .field("description", &self.definition().description)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

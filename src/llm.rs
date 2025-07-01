@@ -17,19 +17,22 @@ use futures_util::StreamExt;
 use log::{debug, error, trace};
 use tokio::runtime::Runtime;
 
+use crate::tools::Tool;
+
 pub struct LlmClient {
     client: Client<OpenAIConfig>,
     model_name: String,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct LlmRequest {
     messages: Vec<Message>,
+    tools: Vec<Box<dyn Tool>>,
 }
 
 impl LlmRequest {
-    pub fn new(messages: Vec<Message>) -> Self {
-        Self { messages }
+    pub fn new(messages: Vec<Message>, tools: Vec<Box<dyn Tool>>) -> Self {
+        Self { messages, tools }
     }
 
     pub fn messages(&self) -> &[Message] {

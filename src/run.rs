@@ -5,12 +5,14 @@ use log::info;
 use crate::{
     config::Config,
     llm::{self, LlmRequest, Message},
+    tools::Tool,
 };
 use std::io::{self};
 
 pub fn run(
     config: Config,
     messages: Vec<Message>,
+    tools: Vec<Box<dyn Tool>>,
     print_usage: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let llm =
@@ -19,7 +21,7 @@ pub fn run(
     let mut out = io::BufWriter::new(io::stdout().lock());
 
     let response = llm.get_chat_completion_streaming(
-        &LlmRequest::new(messages),
+        &LlmRequest::new(messages, tools),
         |chunk| {
             write!(out, "{chunk}").unwrap();
             out.flush().unwrap();
@@ -43,6 +45,7 @@ pub fn run_recipe(
     recipes_dir: &Path,
     recipe_name: &str,
     user_message: Option<String>,
+    tools: Vec<Box<dyn Tool>>,
     print_usage: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let recipe = crate::recipe::get(recipes_dir, recipe_name)?;
@@ -59,5 +62,5 @@ pub fn run_recipe(
         messages
     };
 
-    run(config, messages, print_usage)
+    run(config, messages, tools, print_usage)
 }
