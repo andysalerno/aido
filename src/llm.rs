@@ -37,9 +37,9 @@ impl LlmRequest {
     }
 }
 
-impl Into<ChatCompletionRequestMessage> for Message {
-    fn into(self) -> ChatCompletionRequestMessage {
-        match self {
+impl From<Message> for ChatCompletionRequestMessage {
+    fn from(value: Message) -> Self {
+        match value {
             Message::User(content) => {
                 ChatCompletionRequestUserMessageArgs::default()
                     .content(ChatCompletionRequestUserMessageContent::Text(
