@@ -58,7 +58,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let recipe = recipe::get_content(&recipe_dir, name)?;
 
                         println!("{recipe}");
-                        let _ = recipe::get(&recipe_dir, name)?;
                     }
                     RecipeCommands::Create { name } => {
                         println!("...creating recipe: {name}...");

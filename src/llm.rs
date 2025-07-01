@@ -166,7 +166,7 @@ impl LlmClient {
             .messages()
             .iter()
             .cloned()
-            .map(|msg| msg.into())
+            .map(std::convert::Into::into)
             .collect::<Vec<ChatCompletionRequestMessage>>();
 
         let request = CreateChatCompletionRequestArgs::default()

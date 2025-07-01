@@ -30,12 +30,12 @@ pub enum ArgType {
 impl ArgType {
     fn as_str(self) -> &'static str {
         match self {
-            ArgType::String => "string",
-            ArgType::Number => "number",
-            ArgType::Integer => "integer",
-            ArgType::Boolean => "boolean",
-            ArgType::Object => "object",
-            ArgType::Array => "array",
+            Self::String => "string",
+            Self::Number => "number",
+            Self::Integer => "integer",
+            Self::Boolean => "boolean",
+            Self::Object => "object",
+            Self::Array => "array",
         }
     }
 }
@@ -152,7 +152,7 @@ impl ToolDefinitionBuilder {
         self
     }
 
-    /// Consumes the builder and returns a ToolDefinition
+    /// Consumes the builder and returns a `ToolDefinition`
     pub fn build(self) -> ToolDefinition {
         ToolDefinition::new(self.name, self.description, self.args)
     }
