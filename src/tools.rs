@@ -125,18 +125,35 @@ impl ToolDefinition {
             props.insert(a.name.clone(), entry);
         }
 
+        // json!({
+        //     "type": "function",
+        //     "function": {
+        //         "name": self.name,
+        //         "description": self.description,
+        //         "parameters": {
+        //             "type": "object",
+        //             "properties": props,
+        //             "required": required
+        //         }
+        //     }
+        // })
         json!({
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": {
-                    "type": "object",
-                    "properties": props,
-                    "required": required
-                }
-            }
+            "type": "object",
+            "properties": props,
+            "required": required
         })
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    pub fn args(&self) -> &[Arg] {
+        &self.args
     }
 }
 

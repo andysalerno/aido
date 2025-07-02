@@ -10,14 +10,16 @@ use async_openai::{
         ChatCompletionRequestToolMessageContent,
         ChatCompletionRequestUserMessageArgs,
         ChatCompletionRequestUserMessageContent, ChatCompletionStreamOptions,
-        CreateChatCompletionRequestArgs,
+        ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolType,
+        CreateChatCompletionRequestArgs, FunctionObjectArgs,
+        responses::Function,
     },
 };
 use futures_util::StreamExt;
 use log::{debug, error, trace};
 use tokio::runtime::Runtime;
 
-use crate::tools::Tool;
+use crate::tools::{self, Tool};
 
 pub struct LlmClient {
     client: Client<OpenAIConfig>,
@@ -165,6 +167,13 @@ impl LlmClient {
         request: &LlmRequest,
         mut action_per_chunk: impl FnMut(&str),
     ) -> Result<LlmResponse, Box<dyn std::error::Error>> {
+        let tools = request
+            .tools
+            .iter()
+            .map(std::convert::AsRef::as_ref)
+            .map(make_tool)
+            .collect::<Vec<ChatCompletionTool>>();
+
         let messages = request
             .messages()
             .iter()
@@ -175,6 +184,7 @@ impl LlmClient {
         let request = CreateChatCompletionRequestArgs::default()
             .model(&self.model_name)
             .temperature(0.7)
+            .tools(tools)
             .stream(true)
             .stream_options(ChatCompletionStreamOptions {
                 include_usage: true,
@@ -238,12 +248,27 @@ impl LlmClient {
     }
 }
 
-fn user_message(
-    content: impl Into<String>,
-) -> Result<ChatCompletionRequestMessage, Box<dyn std::error::Error>> {
-    let message = ChatCompletionRequestUserMessageArgs::default()
-        .content(ChatCompletionRequestUserMessageContent::Text(content.into()))
-        .build()?;
+fn make_tool(tool: &dyn Tool) -> ChatCompletionTool {
+    let definition = tool.definition();
+    let name = definition.name().to_owned();
+    let description = definition.description().to_owned();
+    let tool_json = definition.into_json_value();
 
-    Ok(message.into())
+    ChatCompletionTool {
+        r#type: ChatCompletionToolType::Function,
+        function: FunctionObjectArgs::default()
+            .name(name)
+            .description(description)
+            .parameters(tool_json)
+            .build()
+            .unwrap(),
+    }
+
+    // ChatCompletionToolArgs::function(&mut self, value)
+
+    // ChatCompletionTool {
+    //     name: tool.name().to_string(),
+    //     description: tool.description().to_string(),
+    //     args,
+    // }
 }
