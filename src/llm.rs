@@ -161,6 +161,16 @@ pub struct ToolCall {
     arguments: String,
 }
 
+impl ToolCall {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn arguments(&self) -> &str {
+        &self.arguments
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Usage {
     prompt_tokens: u32,

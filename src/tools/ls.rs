@@ -29,11 +29,14 @@ impl Tool for Ls {
     ) -> Result<String, Box<dyn std::error::Error>> {
         let maybe_input = input.get("args").and_then(Value::as_str);
 
-        let mut command = std::process::Command::new("ls");
+        let mut command = std::process::Command::new("/bin/ls");
 
         if let Some(args) = maybe_input {
             command.arg(args);
         }
+
+        // First, get the current working directory of this process:
+        command.current_dir(std::env::current_dir()?);
 
         let output = command.output()?.stdout;
 

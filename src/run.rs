@@ -5,7 +5,7 @@ use log::info;
 use crate::{
     config::Config,
     llm::{self, LlmRequest, Message},
-    tools::Tool,
+    tools::{Tool, ToolInput},
 };
 use std::io::{self};
 
@@ -41,8 +41,23 @@ pub fn run(
 
         out.flush().unwrap();
 
-        if !response.tool_calls().is_empty() {
-            info!("{:?}", response.tool_calls());
+        if response.tool_calls().is_empty() {
+            break;
+        }
+
+        info!("{:?}", response.tool_calls());
+
+        // Invoke the tool:
+        {
+            let first_tool = response.tool_calls().first().unwrap();
+            let matching_tool = tools
+                .iter()
+                .find(|t| t.definition().name() == first_tool.name())
+                .ok_or_else(|| {
+                    format!("Tool {} not found", first_tool.name())
+                })?;
+
+            invoke_tool(matching_tool.as_ref(), first_tool.arguments())?;
         }
     }
 
@@ -72,4 +87,19 @@ pub fn run_recipe(
     };
 
     run(config, messages, tools, print_usage)
+}
+
+fn invoke_tool(
+    tool: &dyn Tool,
+    args: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    info!("Invoking tool: {}", tool.definition().name());
+
+    let args_parsed = serde_json::from_str(args)?;
+
+    let output = tool.execute(args_parsed);
+
+    info!("Tool output: {output:?}");
+
+    output
 }
