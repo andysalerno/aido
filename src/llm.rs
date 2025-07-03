@@ -99,6 +99,7 @@ pub enum Message {
 pub struct LlmResponse {
     text: String,
     usage: Usage,
+    tool_calls: Vec<ToolCall>,
 }
 
 impl LlmResponse {
@@ -109,6 +110,42 @@ impl LlmResponse {
     pub fn usage(&self) -> &Usage {
         &self.usage
     }
+}
+
+fn llm_response_from_stream(
+    stream: &ChatChoiceStream,
+    usage: Usage,
+) -> Result<LlmResponse, Box<dyn std::error::Error>> {
+    let mut text = String::new();
+    let mut tool_calls = Vec::new();
+
+    if let Some(text_output) = &stream.delta.content {
+        text.push_str(text_output);
+    }
+
+    if let Some(tool_calls_vec) = &stream.delta.tool_calls {
+        for tool_call in tool_calls_vec {
+            let name =
+                tool_call.function.as_ref().unwrap().name.clone().unwrap();
+            let arguments = tool_call
+                .function
+                .as_ref()
+                .unwrap()
+                .arguments
+                .clone()
+                .unwrap_or_default();
+
+            tool_calls.push(ToolCall { name, arguments });
+        }
+    }
+
+    Ok(LlmResponse { text, usage, tool_calls })
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ToolCall {
+    name: String,
+    arguments: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -197,13 +234,10 @@ impl LlmClient {
             debug!("{json}");
         }
 
-        let mut gradual_response = String::new();
         let mut usage = Usage::default();
-
         let mut agg: Option<ChatChoiceStream> = None;
 
         RT.block_on(async {
-            let gradual_response = &mut gradual_response;
             let mut stream =
                 self.client.chat().create_stream(request).await.unwrap();
 
@@ -220,16 +254,7 @@ impl LlmClient {
                             agg = Some(choice.clone());
                         }
 
-                        info!("{}", serde_json::to_string(&agg).unwrap());
-
-                        if let Some(delta) = chunk
-                            .choices
-                            .first()
-                            .and_then(|c| c.delta.content.as_ref())
-                        {
-                            action_per_chunk(delta);
-                            gradual_response.push_str(delta);
-                        }
+                        debug!("{}", serde_json::to_string(&agg).unwrap());
 
                         if let Some(u) = chunk.usage {
                             usage = Usage::new(
@@ -247,9 +272,7 @@ impl LlmClient {
             }
         });
 
-        debug!("Response: {gradual_response}");
-
-        Ok(LlmResponse { text: gradual_response, usage })
+        Ok(llm_response_from_stream(&agg.unwrap(), usage)?)
     }
 
     pub fn get_chat_completion(
