@@ -35,6 +35,10 @@ pub fn run(
         writeln!(out, "{:?}", response.usage()).unwrap();
     }
 
+    if !response.tool_calls().is_empty() {
+        info!("{:?}", response.tool_calls());
+    }
+
     out.flush().unwrap();
 
     Ok(())

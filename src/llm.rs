@@ -109,6 +109,10 @@ impl LlmResponse {
     pub fn usage(&self) -> &Usage {
         &self.usage
     }
+
+    pub fn tool_calls(&self) -> &[ToolCall] {
+        &self.tool_calls
+    }
 }
 
 fn llm_response_from_stream(
