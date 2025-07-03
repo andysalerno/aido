@@ -10,16 +10,15 @@ use async_openai::{
         ChatCompletionRequestToolMessageContent,
         ChatCompletionRequestUserMessageArgs,
         ChatCompletionRequestUserMessageContent, ChatCompletionStreamOptions,
-        ChatCompletionTool, ChatCompletionToolArgs, ChatCompletionToolType,
+        ChatCompletionTool, ChatCompletionToolType,
         CreateChatCompletionRequestArgs, FunctionObjectArgs,
-        responses::Function,
     },
 };
 use futures_util::StreamExt;
-use log::{debug, error, info, trace};
+use log::{debug, error, trace};
 use tokio::runtime::Runtime;
 
-use crate::tools::{self, Tool};
+use crate::tools::Tool;
 
 pub struct LlmClient {
     client: Client<OpenAIConfig>,
@@ -202,7 +201,7 @@ impl LlmClient {
     pub fn get_chat_completion_streaming(
         &self,
         request: &LlmRequest,
-        mut action_per_chunk: impl FnMut(&str),
+        action_per_chunk: impl FnMut(&str),
     ) -> Result<LlmResponse, Box<dyn std::error::Error>> {
         let tools = request
             .tools
