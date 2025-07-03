@@ -201,7 +201,7 @@ impl LlmClient {
     pub fn get_chat_completion_streaming(
         &self,
         request: &LlmRequest,
-        action_per_chunk: impl FnMut(&str),
+        mut action_per_chunk: impl FnMut(&str),
     ) -> Result<LlmResponse, Box<dyn std::error::Error>> {
         let tools = request
             .tools
@@ -251,6 +251,10 @@ impl LlmClient {
                             aggregate(agg_chunk, choice);
                         } else {
                             agg = Some(choice.clone());
+                        }
+
+                        if let Some(content) = &choice.delta.content {
+                            action_per_chunk(content);
                         }
 
                         debug!("{}", serde_json::to_string(&agg).unwrap());
