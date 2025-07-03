@@ -272,7 +272,7 @@ impl LlmClient {
             }
         });
 
-        Ok(llm_response_from_stream(&agg.unwrap(), usage)?)
+        llm_response_from_stream(&agg.unwrap(), usage)
     }
 
     pub fn get_chat_completion(
