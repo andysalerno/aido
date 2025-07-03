@@ -2,7 +2,7 @@ use async_openai::{
     Client,
     config::OpenAIConfig,
     types::{
-        ChatCompletionRequestAssistantMessageArgs,
+        ChatChoiceStream, ChatCompletionRequestAssistantMessageArgs,
         ChatCompletionRequestAssistantMessageContent,
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
         ChatCompletionRequestSystemMessageContent,
@@ -16,7 +16,7 @@ use async_openai::{
     },
 };
 use futures_util::StreamExt;
-use log::{debug, error, trace};
+use log::{debug, error, info, trace};
 use tokio::runtime::Runtime;
 
 use crate::tools::{self, Tool};
@@ -200,6 +200,8 @@ impl LlmClient {
         let mut gradual_response = String::new();
         let mut usage = Usage::default();
 
+        let mut agg: Option<ChatChoiceStream> = None;
+
         RT.block_on(async {
             let gradual_response = &mut gradual_response;
             let mut stream =
@@ -209,6 +211,16 @@ impl LlmClient {
                 match event {
                     Ok(chunk) => {
                         trace!("Received chunk: {chunk:?}");
+
+                        let choice = chunk.choices.first().unwrap();
+
+                        if let Some(agg_chunk) = &mut agg {
+                            aggregate(agg_chunk, choice);
+                        } else {
+                            agg = Some(choice.clone());
+                        }
+
+                        info!("{}", serde_json::to_string(&agg).unwrap());
 
                         if let Some(delta) = chunk
                             .choices
@@ -245,6 +257,58 @@ impl LlmClient {
         request: &LlmRequest,
     ) -> Result<LlmResponse, Box<dyn std::error::Error>> {
         self.get_chat_completion_streaming(request, |_| {})
+    }
+}
+
+fn aggregate(update_to: &mut ChatChoiceStream, from: &ChatChoiceStream) {
+    // There must be a better way to do this...
+    if let Some(delta) = &from.delta.content {
+        if let Some(content) = &mut update_to.delta.content {
+            content.push_str(delta);
+        }
+    }
+
+    if let Some(tool_calls) = &from.delta.tool_calls {
+        if update_to.delta.tool_calls.is_none() {
+            update_to.delta.tool_calls = Some(vec![]);
+        }
+
+        for tool_call in tool_calls {
+            let index = tool_call.index as usize;
+
+            // God forgive me for what I am about to do...
+            if index >= update_to.delta.tool_calls.as_ref().unwrap().len() {
+                update_to
+                    .delta
+                    .tool_calls
+                    .as_mut()
+                    .unwrap()
+                    .push(tool_call.clone());
+            } else {
+                let function_args =
+                    update_to.delta.tool_calls.as_mut().unwrap()[index]
+                        .function
+                        .as_mut()
+                        .unwrap()
+                        .arguments
+                        .as_mut()
+                        .unwrap();
+
+                function_args.push_str(
+                    tool_call
+                        .function
+                        .as_ref()
+                        .unwrap()
+                        .arguments
+                        .as_ref()
+                        .unwrap(),
+                );
+            }
+        }
+    }
+
+    if let Some(finish_reason) = &from.finish_reason {
+        update_to.finish_reason = Some(*finish_reason);
     }
 }
 
