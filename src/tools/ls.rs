@@ -1,8 +1,26 @@
 use serde_json::Value;
 
-use crate::tools::{Arg, ArgType, Tool, ToolDefinitionBuilder, ToolInput};
+use crate::tools::{
+    Arg, ArgType, Tool, ToolDefinition, ToolDefinitionBuilder, ToolInput,
+};
 
-pub struct Ls;
+pub struct Ls {
+    definition: ToolDefinition,
+}
+
+impl Ls {
+    pub fn new() -> Self {
+        let definition = ToolDefinitionBuilder::new("ls")
+            .description("List directory contents")
+            .arg(
+                Arg::new("args")
+                    .description("The input arguments for ls. Example: -alh")
+                    .kind(ArgType::String),
+            )
+            .build();
+        Self { definition }
+    }
+}
 
 impl Tool for Ls {
     fn execute(
@@ -22,14 +40,7 @@ impl Tool for Ls {
         Ok(String::from_utf8(output)?)
     }
 
-    fn definition(&self) -> super::ToolDefinition {
-        ToolDefinitionBuilder::new("ls")
-            .description("List directory contents")
-            .arg(
-                Arg::new("args")
-                    .description("The input arguments for ls. Example: -alh")
-                    .kind(ArgType::String),
-            )
-            .build()
+    fn definition(&self) -> &ToolDefinition {
+        &self.definition
     }
 }

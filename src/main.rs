@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         config::get_configuration_file_path()?
     };
 
-    let tools: Vec<Box<dyn Tool>> = vec![Box::new(tools::Ls)];
+    let tools: Vec<Box<dyn Tool>> = vec![Box::new(tools::Ls::new())];
 
     let config = config::retrieve_from_path(&config_file_path)?;
 

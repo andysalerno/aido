@@ -11,34 +11,39 @@ use std::io::{self};
 
 pub fn run(
     config: Config,
-    messages: Vec<Message>,
+    mut messages: Vec<Message>,
     tools: Vec<Box<dyn Tool>>,
     print_usage: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let llm =
         llm::LlmClient::new(config.model_name, config.api_key, config.api_url);
 
+    let tool_definitions =
+        tools.iter().map(|t| t.definition()).collect::<Vec<_>>();
+
     let mut out = io::BufWriter::new(io::stdout().lock());
+    loop {
+        let tool_definitions = tool_definitions.clone();
+        let response = llm.get_chat_completion_streaming(
+            &LlmRequest::new(messages, tool_definitions),
+            |chunk| {
+                write!(out, "{chunk}").unwrap();
+                out.flush().unwrap();
+            },
+        )?;
 
-    let response = llm.get_chat_completion_streaming(
-        &LlmRequest::new(messages, tools),
-        |chunk| {
-            write!(out, "{chunk}").unwrap();
-            out.flush().unwrap();
-        },
-    )?;
+        writeln!(out).unwrap();
+        out.flush().unwrap();
 
-    writeln!(out).unwrap();
-    out.flush().unwrap();
+        if print_usage {
+            writeln!(out, "{:?}", response.usage()).unwrap();
+        }
 
-    if print_usage {
-        writeln!(out, "{:?}", response.usage()).unwrap();
-    }
+        out.flush().unwrap();
 
-    out.flush().unwrap();
-
-    if !response.tool_calls().is_empty() {
-        info!("{:?}", response.tool_calls());
+        if !response.tool_calls().is_empty() {
+            info!("{:?}", response.tool_calls());
+        }
     }
 
     Ok(())

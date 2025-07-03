@@ -11,7 +11,7 @@ use serde_json::{Map, Value, json};
 pub type ToolInput = HashMap<String, Value>;
 
 pub trait Tool {
-    fn definition(&self) -> ToolDefinition;
+    fn definition(&self) -> &ToolDefinition;
 
     /// Executes the tool with the given input and returns a result.
     fn execute(
@@ -52,7 +52,7 @@ impl ArgType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Arg {
     name: String,
     description: String,
@@ -93,6 +93,7 @@ impl Arg {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ToolDefinition {
     name: String,
     description: String,
@@ -104,7 +105,7 @@ impl ToolDefinition {
         Self { name, description, args }
     }
 
-    pub fn into_json_value(self) -> Value {
+    pub fn json_value(&self) -> Value {
         let mut props = Map::new();
         let mut required = Vec::new();
 
@@ -242,7 +243,7 @@ mod tests {
             }
         });
 
-        let tool_str = serde_json::to_string(&tool.into_json_value()).unwrap();
+        let tool_str = serde_json::to_string(&tool.json_value()).unwrap();
         let expected_str = serde_json::to_string(&expected_json).unwrap();
 
         assert_eq!(tool_str, expected_str);
@@ -267,7 +268,7 @@ mod tests {
             }
         });
 
-        let actual_json = tool.into_json_value();
+        let actual_json = tool.json_value();
         assert_eq!(actual_json, expected_json);
     }
 
@@ -307,7 +308,7 @@ mod tests {
             )
             .build();
 
-        let json = tool.into_json_value();
+        let json = tool.json_value();
         let properties = &json["function"]["parameters"]["properties"];
 
         assert_eq!(properties["string_arg"]["type"], "string");
@@ -341,7 +342,7 @@ mod tests {
             )
             .build();
 
-        let json = tool.into_json_value();
+        let json = tool.json_value();
         let properties = &json["function"]["parameters"]["properties"];
 
         assert_eq!(
@@ -368,7 +369,7 @@ mod tests {
             .arg(Arg::new("fourth").description("Fourth arg").required())
             .build();
 
-        let json = tool.into_json_value();
+        let json = tool.json_value();
         let required = &json["function"]["parameters"]["required"];
 
         assert!(
@@ -430,7 +431,7 @@ mod tests {
             .arg(Arg::new("arg2").description("Second arg"))
             .build();
 
-        let json = tool.into_json_value();
+        let json = tool.json_value();
 
         assert_eq!(json["function"]["name"], "chained_tool");
         assert_eq!(json["function"]["description"], "Updated description");
@@ -447,13 +448,13 @@ mod tests {
         let tool1 = ToolDefinitionBuilder::new("tool1")
             .description("First tool")
             .build()
-            .into_json_value();
+            .json_value();
 
         let tool2 = ToolDefinitionBuilder::new("tool2")
             .description("Second tool")
             .arg(Arg::new("param").description("A parameter"))
             .build()
-            .into_json_value();
+            .json_value();
 
         let tool_list = ToolList::new(vec![tool1.clone(), tool2.clone()]);
 
@@ -477,7 +478,7 @@ mod tests {
             args,
         );
 
-        let json = tool.into_json_value();
+        let json = tool.json_value();
 
         assert_eq!(json["function"]["name"], "direct_tool");
         assert_eq!(json["function"]["description"], "Directly created tool");
@@ -530,7 +531,7 @@ mod tests {
             )
             .build();
 
-        let json = tool.into_json_value();
+        let json = tool.json_value();
         let function = &json["function"];
         let properties = &function["parameters"]["properties"];
         let required = function["parameters"]["required"].as_array().unwrap();

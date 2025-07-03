@@ -18,7 +18,7 @@ use futures_util::StreamExt;
 use log::{debug, error, trace};
 use tokio::runtime::Runtime;
 
-use crate::tools::Tool;
+use crate::tools::{Tool, ToolDefinition};
 
 pub struct LlmClient {
     client: Client<OpenAIConfig>,
@@ -26,13 +26,16 @@ pub struct LlmClient {
 }
 
 #[derive(Debug, Default)]
-pub struct LlmRequest {
+pub struct LlmRequest<'a> {
     messages: Vec<Message>,
-    tools: Vec<Box<dyn Tool>>,
+    tools: Vec<&'a ToolDefinition>,
 }
 
-impl LlmRequest {
-    pub fn new(messages: Vec<Message>, tools: Vec<Box<dyn Tool>>) -> Self {
+impl<'a> LlmRequest<'a> {
+    pub fn new(
+        messages: Vec<Message>,
+        tools: Vec<&'a ToolDefinition>,
+    ) -> Self {
         Self { messages, tools }
     }
 
@@ -204,14 +207,13 @@ impl LlmClient {
 
     pub fn get_chat_completion_streaming(
         &self,
-        request: &LlmRequest,
+        request: &LlmRequest<'_>,
         mut action_per_chunk: impl FnMut(&str),
     ) -> Result<LlmResponse, Box<dyn std::error::Error>> {
         let tools = request
             .tools
             .iter()
-            .map(std::convert::AsRef::as_ref)
-            .map(make_tool)
+            .map(|t| make_tool(t))
             .collect::<Vec<ChatCompletionTool>>();
 
         let messages = request
@@ -284,7 +286,7 @@ impl LlmClient {
 
     pub fn get_chat_completion(
         &self,
-        request: &LlmRequest,
+        request: &LlmRequest<'_>,
     ) -> Result<LlmResponse, Box<dyn std::error::Error>> {
         self.get_chat_completion_streaming(request, |_| {})
     }
@@ -342,11 +344,10 @@ fn aggregate(update_to: &mut ChatChoiceStream, from: &ChatChoiceStream) {
     }
 }
 
-fn make_tool(tool: &dyn Tool) -> ChatCompletionTool {
-    let definition = tool.definition();
-    let name = definition.name().to_owned();
-    let description = definition.description().to_owned();
-    let tool_json = definition.into_json_value();
+fn make_tool(tool: &ToolDefinition) -> ChatCompletionTool {
+    let name = tool.name().to_owned();
+    let description = tool.description().to_owned();
+    let tool_json = tool.json_value();
 
     ChatCompletionTool {
         r#type: ChatCompletionToolType::Function,
