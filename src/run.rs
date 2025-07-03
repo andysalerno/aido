@@ -11,7 +11,7 @@ use std::io::{self};
 
 pub fn run(
     config: Config,
-    mut messages: Vec<Message>,
+    messages: Vec<Message>,
     tools: Vec<Box<dyn Tool>>,
     print_usage: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -19,13 +19,13 @@ pub fn run(
         llm::LlmClient::new(config.model_name, config.api_key, config.api_url);
 
     let tool_definitions =
-        tools.iter().map(|t| t.definition()).collect::<Vec<_>>();
+        tools.iter().map(|t| t.definition().clone()).collect::<Vec<_>>();
 
     let mut out = io::BufWriter::new(io::stdout().lock());
     loop {
         let tool_definitions = tool_definitions.clone();
         let response = llm.get_chat_completion_streaming(
-            &LlmRequest::new(messages, tool_definitions),
+            &LlmRequest::new(messages.clone(), tool_definitions.clone()),
             |chunk| {
                 write!(out, "{chunk}").unwrap();
                 out.flush().unwrap();

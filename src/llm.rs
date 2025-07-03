@@ -18,29 +18,36 @@ use futures_util::StreamExt;
 use log::{debug, error, trace};
 use tokio::runtime::Runtime;
 
-use crate::tools::{Tool, ToolDefinition};
+use crate::tools::ToolDefinition;
 
 pub struct LlmClient {
     client: Client<OpenAIConfig>,
     model_name: String,
 }
 
-#[derive(Debug, Default)]
-pub struct LlmRequest<'a> {
+#[derive(Debug)]
+pub struct LlmRequest {
     messages: Vec<Message>,
-    tools: Vec<&'a ToolDefinition>,
+    tools: Vec<ToolDefinition>,
 }
 
-impl<'a> LlmRequest<'a> {
-    pub fn new(
-        messages: Vec<Message>,
-        tools: Vec<&'a ToolDefinition>,
-    ) -> Self {
+impl LlmRequest {
+    pub fn new(messages: Vec<Message>, tools: Vec<ToolDefinition>) -> Self {
         Self { messages, tools }
     }
 
     pub fn messages(&self) -> &[Message] {
         &self.messages
+    }
+
+    pub fn tools(&self) -> &[ToolDefinition] {
+        &self.tools
+    }
+}
+
+impl Default for LlmRequest {
+    fn default() -> Self {
+        Self { messages: Vec::new(), tools: Vec::new() }
     }
 }
 
@@ -207,7 +214,7 @@ impl LlmClient {
 
     pub fn get_chat_completion_streaming(
         &self,
-        request: &LlmRequest<'_>,
+        request: &LlmRequest,
         mut action_per_chunk: impl FnMut(&str),
     ) -> Result<LlmResponse, Box<dyn std::error::Error>> {
         let tools = request
@@ -286,7 +293,7 @@ impl LlmClient {
 
     pub fn get_chat_completion(
         &self,
-        request: &LlmRequest<'_>,
+        request: &LlmRequest,
     ) -> Result<LlmResponse, Box<dyn std::error::Error>> {
         self.get_chat_completion_streaming(request, |_| {})
     }
