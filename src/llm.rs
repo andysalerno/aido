@@ -27,6 +27,7 @@ pub struct LlmClient {
 }
 
 #[derive(Debug)]
+#[derive(Default)]
 pub struct LlmRequest {
     messages: Vec<Message>,
     tools: Vec<ToolDefinition>,
@@ -46,11 +47,6 @@ impl LlmRequest {
     }
 }
 
-impl Default for LlmRequest {
-    fn default() -> Self {
-        Self { messages: Vec::new(), tools: Vec::new() }
-    }
-}
 
 impl From<Message> for ChatCompletionRequestMessage {
     fn from(value: Message) -> Self {
@@ -65,14 +61,10 @@ impl From<Message> for ChatCompletionRequestMessage {
                     .into()
             }
             Message::Assistant(content, tool_calls) => {
-                let converted_tools = tool_calls.and_then(|tools| {
-                    Some(
-                        tools
+                let converted_tools = tool_calls.map(|tools| tools
                             .into_iter()
-                            .map(|t| t.into())
-                            .collect::<Vec<ChatCompletionMessageToolCall>>(),
-                    )
-                });
+                            .map(std::convert::Into::into)
+                            .collect::<Vec<ChatCompletionMessageToolCall>>());
                 ChatCompletionRequestAssistantMessageArgs::default()
                     .content(
                         ChatCompletionRequestAssistantMessageContent::Text(
@@ -254,7 +246,7 @@ impl LlmClient {
         let tools = request
             .tools
             .iter()
-            .map(|t| make_tool(t))
+            .map(make_tool)
             .collect::<Vec<ChatCompletionTool>>();
 
         let messages = request

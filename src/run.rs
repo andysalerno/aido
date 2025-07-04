@@ -5,7 +5,7 @@ use log::info;
 use crate::{
     config::Config,
     llm::{self, LlmRequest, Message},
-    tools::{Tool, ToolInput},
+    tools::Tool,
 };
 use std::io::{self};
 
