@@ -23,7 +23,6 @@ pub fn run(
 
     let mut out = io::BufWriter::new(io::stdout().lock());
     loop {
-        let tool_definitions = tool_definitions.clone();
         let response = llm.get_chat_completion_streaming(
             &LlmRequest::new(messages.clone(), tool_definitions.clone()),
             |chunk| {

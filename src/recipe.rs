@@ -1,6 +1,12 @@
 use std::path::Path;
+use std::sync::LazyLock;
 
 use log::info;
+use regex::Regex;
+
+static HEADER_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)^(-{3,})\s*\n(.*?)\n(-{3,})\s*\n(.*)$").unwrap()
+});
 
 #[derive(Debug, Clone)]
 pub struct Recipe {
@@ -119,8 +125,6 @@ pub fn get_recipes_dir(config_file_path: &str) -> std::path::PathBuf {
 }
 
 fn parse_recipe(content: &str) -> Result<Recipe, Box<dyn std::error::Error>> {
-    use regex::Regex;
-
     if content.trim().is_empty() {
         return Err("Recipe content is empty".into());
     }
@@ -131,9 +135,7 @@ fn parse_recipe(content: &str) -> Result<Recipe, Box<dyn std::error::Error>> {
     // 2. Header content (non-greedy match, including newlines)
     // 3. Closing delimiter (3+ dashes)
     // 4. Remaining body content
-    // TODO: compile this once and reuse it
-    let header_regex =
-        Regex::new(r"(?s)^(-{3,})\s*\n(.*?)\n(-{3,})\s*\n(.*)$").unwrap();
+    let header_regex = &*HEADER_REGEX;
 
     header_regex.captures(content).map_or_else(
         || Ok(Recipe { header: Header::empty(), body: content.to_string() }),
