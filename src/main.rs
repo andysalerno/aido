@@ -93,6 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     info!("Configuration loaded: {config:?}");
+    info!("Test change.");
 
     if let Some(input) = args.input() {
         info!("Input: {:?}", args.input());
