@@ -219,28 +219,22 @@ mod tests {
             )
             .build();
 
-        let expected_json = serde_json::json!({
-            "type": "function",
-            "function": {
-                "name": "my_tool",
-                "description": "some test tool",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "myArgument": {
-                            "type": "string",
-                            "description": "Some description of my argument",
-                        },
-                        "myOtherArgument": {
-                            "type": "number",
-                            "description": "Some other argument"
-                        }
-                    },
-                    "required": [
-                        "myArgument"
-                    ]
+        let expected_json = serde_json::json!(
+        {
+            "type": "object",
+            "properties": {
+                "myArgument": {
+                    "type": "string",
+                    "description": "Some description of my argument",
+                },
+                "myOtherArgument": {
+                    "type": "number",
+                    "description": "Some other argument"
                 }
-            }
+            },
+            "required": [
+                "myArgument"
+            ]
         });
 
         let tool_str = serde_json::to_string(&tool.json_value()).unwrap();
@@ -255,17 +249,11 @@ mod tests {
             .description("A tool with no arguments")
             .build();
 
-        let expected_json = serde_json::json!({
-            "type": "function",
-            "function": {
-                "name": "empty_tool",
-                "description": "A tool with no arguments",
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                    "required": []
-                }
-            }
+        let expected_json = serde_json::json!(
+        {
+            "type": "object",
+            "properties": {},
+            "required": []
         });
 
         let actual_json = tool.json_value();
@@ -309,7 +297,7 @@ mod tests {
             .build();
 
         let json = tool.json_value();
-        let properties = &json["function"]["parameters"]["properties"];
+        let properties = &json["properties"];
 
         assert_eq!(properties["string_arg"]["type"], "string");
         assert_eq!(properties["number_arg"]["type"], "number");
@@ -343,7 +331,7 @@ mod tests {
             .build();
 
         let json = tool.json_value();
-        let properties = &json["function"]["parameters"]["properties"];
+        let properties = &json["properties"];
 
         assert_eq!(
             properties["color"]["enum"],
@@ -353,10 +341,7 @@ mod tests {
             properties["size"]["enum"],
             serde_json::json!(["small", "medium", "large"])
         );
-        assert_eq!(
-            json["function"]["parameters"]["required"],
-            serde_json::json!(["color"])
-        );
+        assert_eq!(json["required"], serde_json::json!(["color"]));
     }
 
     #[test]
@@ -370,7 +355,7 @@ mod tests {
             .build();
 
         let json = tool.json_value();
-        let required = &json["function"]["parameters"]["required"];
+        let required = &json["required"];
 
         assert!(
             required.as_array().unwrap().contains(&serde_json::json!("first"))
@@ -433,14 +418,8 @@ mod tests {
 
         let json = tool.json_value();
 
-        assert_eq!(json["function"]["name"], "chained_tool");
-        assert_eq!(json["function"]["description"], "Updated description");
-        assert!(
-            json["function"]["parameters"]["properties"]["arg1"].is_object()
-        );
-        assert!(
-            json["function"]["parameters"]["properties"]["arg2"].is_object()
-        );
+        assert!(json["properties"]["arg1"].is_object());
+        assert!(json["properties"]["arg2"].is_object());
     }
 
     #[test]
@@ -480,16 +459,8 @@ mod tests {
 
         let json = tool.json_value();
 
-        assert_eq!(json["function"]["name"], "direct_tool");
-        assert_eq!(json["function"]["description"], "Directly created tool");
-        assert_eq!(
-            json["function"]["parameters"]["properties"]["direct_arg"]["type"],
-            "boolean"
-        );
-        assert_eq!(
-            json["function"]["parameters"]["required"],
-            serde_json::json!(["direct_arg"])
-        );
+        assert_eq!(json["properties"]["direct_arg"]["type"], "boolean");
+        assert_eq!(json["required"], serde_json::json!(["direct_arg"]));
     }
 
     #[test]
@@ -532,16 +503,7 @@ mod tests {
             .build();
 
         let json = tool.json_value();
-        let function = &json["function"];
-        let properties = &function["parameters"]["properties"];
-        let required = function["parameters"]["required"].as_array().unwrap();
-
-        // Check basic structure
-        assert_eq!(function["name"], "complex_tool");
-        assert_eq!(
-            function["description"],
-            "A complex tool demonstrating various features"
-        );
+        let required = json["required"].as_array().unwrap();
 
         // Check required arguments
         assert_eq!(required.len(), 2);
@@ -549,19 +511,19 @@ mod tests {
         assert!(required.contains(&serde_json::json!("required_number")));
 
         // Check property types and descriptions
-        assert_eq!(properties["required_string"]["type"], "string");
+        assert_eq!(json["properties"]["required_string"]["type"], "string");
         assert_eq!(
-            properties["required_string"]["description"],
+            json["properties"]["required_string"]["description"],
             "A required string parameter"
         );
 
-        assert_eq!(properties["optional_enum"]["type"], "string");
+        assert_eq!(json["properties"]["optional_enum"]["type"], "string");
         assert_eq!(
-            properties["optional_enum"]["enum"],
+            json["properties"]["optional_enum"]["enum"],
             serde_json::json!(["option1", "option2", "option3"])
         );
 
-        assert_eq!(properties["required_number"]["type"], "number");
-        assert_eq!(properties["optional_boolean"]["type"], "boolean");
+        assert_eq!(json["properties"]["required_number"]["type"], "number");
+        assert_eq!(json["properties"]["optional_boolean"]["type"], "boolean");
     }
 }
