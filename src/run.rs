@@ -12,7 +12,7 @@ use std::io::{self};
 pub fn run(
     config: Config,
     mut messages: Vec<Message>,
-    tools: Vec<Box<dyn Tool>>,
+    tools: &[Box<dyn Tool>],
     print_usage: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let llm =
@@ -90,7 +90,7 @@ pub fn run_recipe(
     recipes_dir: &Path,
     recipe_name: &str,
     user_message: Option<String>,
-    tools: Vec<Box<dyn Tool>>,
+    tools: &[Box<dyn Tool>],
     print_usage: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let recipe = crate::recipe::get(recipes_dir, recipe_name)?;

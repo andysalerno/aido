@@ -83,7 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     &recipes_dir,
                     recipe,
                     user_message.to_owned(),
-                    tools,
+                    &tools,
                     args.usage(),
                 )?;
 
@@ -97,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(input) = args.input() {
         info!("Input: {:?}", args.input());
         let messages = vec![Message::User(input.to_string())];
-        run::run(config, messages, tools, args.usage())?;
+        run::run(config, messages, &tools, args.usage())?;
     } else {
         info!("No input file provided; all done.");
     }
