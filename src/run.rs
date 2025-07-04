@@ -60,7 +60,7 @@ pub fn run(
         info!("{:?}", response.tool_calls());
 
         // Invoke the tool:
-        let tool_output = {
+        let tool_message = {
             let first_tool = response.tool_calls().first().unwrap();
             let matching_tool = tools
                 .iter()
@@ -69,11 +69,17 @@ pub fn run(
                     format!("Tool {} not found", first_tool.name())
                 })?;
 
-            invoke_tool(matching_tool.as_ref(), first_tool.arguments())?
+            let tool_output =
+                invoke_tool(matching_tool.as_ref(), first_tool.arguments())?;
+
+            Message::Tool {
+                content: tool_output,
+                id: first_tool.id().to_owned(),
+            }
         };
 
         // add a tool message
-        messages.push(Message::Tool(tool_output));
+        messages.push(tool_message);
     }
 
     Ok(())

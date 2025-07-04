@@ -93,11 +93,12 @@ impl From<Message> for ChatCompletionRequestMessage {
                     .unwrap()
                     .into()
             }
-            Message::Tool(content) => {
+            Message::Tool { content, id } => {
                 ChatCompletionRequestToolMessageArgs::default()
                     .content(ChatCompletionRequestToolMessageContent::Text(
                         content,
                     ))
+                    .tool_call_id(id)
                     .build()
                     .unwrap()
                     .into()
@@ -111,7 +112,7 @@ pub enum Message {
     User(String),
     Assistant(String, Option<Vec<ToolCall>>),
     System(String),
-    Tool(String),
+    Tool { content: String, id: String },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -174,6 +175,10 @@ impl ToolCall {
 
     pub fn arguments(&self) -> &str {
         &self.arguments
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
     }
 }
 
