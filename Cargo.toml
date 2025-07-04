@@ -39,6 +39,7 @@ future-incompatible = "warn"
 refining-impl-trait = "warn"
 rust-2024-compatibility = "warn"
 rust-2018-idioms = "warn"
+dead_code = "allow"
 
 [lints.clippy]
 complexity = { level = "warn", priority = -1 }
