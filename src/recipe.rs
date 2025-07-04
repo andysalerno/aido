@@ -4,6 +4,12 @@ use std::sync::LazyLock;
 use log::info;
 use regex::Regex;
 
+/// Regex pattern to match header delimiters (3 or more dashes) at the start of the document
+/// The pattern captures:
+/// 1. Opening delimiter (3+ dashes) at the very beginning
+/// 2. Header content (non-greedy match, including newlines)
+/// 3. Closing delimiter (3+ dashes)
+/// 4. Remaining body content
 static HEADER_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?s)^(-{3,})\s*\n(.*?)\n(-{3,})\s*\n(.*)$").unwrap()
 });
@@ -128,13 +134,6 @@ fn parse_recipe(content: &str) -> Result<Recipe, Box<dyn std::error::Error>> {
     if content.trim().is_empty() {
         return Err("Recipe content is empty".into());
     }
-
-    // Regex pattern to match header delimiters (3 or more dashes) at the start of the document
-    // The pattern captures:
-    // 1. Opening delimiter (3+ dashes) at the very beginning
-    // 2. Header content (non-greedy match, including newlines)
-    // 3. Closing delimiter (3+ dashes)
-    // 4. Remaining body content
 
     HEADER_REGEX.captures(content).map_or_else(
         || Ok(Recipe { header: Header::empty(), body: content.to_string() }),
