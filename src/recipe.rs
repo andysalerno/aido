@@ -135,9 +135,8 @@ fn parse_recipe(content: &str) -> Result<Recipe, Box<dyn std::error::Error>> {
     // 2. Header content (non-greedy match, including newlines)
     // 3. Closing delimiter (3+ dashes)
     // 4. Remaining body content
-    let header_regex = &*HEADER_REGEX;
 
-    header_regex.captures(content).map_or_else(
+    HEADER_REGEX.captures(content).map_or_else(
         || Ok(Recipe { header: Header::empty(), body: content.to_string() }),
         |captures| {
             let header = captures.get(2).unwrap().as_str();
