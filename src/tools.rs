@@ -523,7 +523,10 @@ mod tests {
             serde_json::json!(["option1", "option2", "option3"])
         );
 
-        assert_eq!(json["properties"]["required_number"]["type"], "number");
+        assert_eq!(
+            json["properties"]["required_number"]["type"],
+            "intentional_fail"
+        );
         assert_eq!(json["properties"]["optional_boolean"]["type"], "boolean");
     }
 }
