@@ -2,7 +2,8 @@ use async_openai::{
     Client,
     config::OpenAIConfig,
     types::{
-        ChatChoiceStream, ChatCompletionRequestAssistantMessageArgs,
+        ChatChoiceStream, ChatCompletionMessageToolCall,
+        ChatCompletionRequestAssistantMessageArgs,
         ChatCompletionRequestAssistantMessageContent,
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
         ChatCompletionRequestSystemMessageContent,
@@ -11,7 +12,7 @@ use async_openai::{
         ChatCompletionRequestUserMessageArgs,
         ChatCompletionRequestUserMessageContent, ChatCompletionStreamOptions,
         ChatCompletionTool, ChatCompletionToolType,
-        CreateChatCompletionRequestArgs, FunctionObjectArgs,
+        CreateChatCompletionRequestArgs, FunctionCall, FunctionObjectArgs,
     },
 };
 use futures_util::StreamExt;
@@ -63,13 +64,22 @@ impl From<Message> for ChatCompletionRequestMessage {
                     .unwrap()
                     .into()
             }
-            Message::Assistant(content) => {
+            Message::Assistant(content, tool_calls) => {
+                let converted_tools = tool_calls.and_then(|tools| {
+                    Some(
+                        tools
+                            .into_iter()
+                            .map(|t| t.into())
+                            .collect::<Vec<ChatCompletionMessageToolCall>>(),
+                    )
+                });
                 ChatCompletionRequestAssistantMessageArgs::default()
                     .content(
                         ChatCompletionRequestAssistantMessageContent::Text(
                             content,
                         ),
                     )
+                    .tool_calls(converted_tools.unwrap_or_default())
                     .build()
                     .unwrap()
                     .into()
@@ -99,7 +109,7 @@ impl From<Message> for ChatCompletionRequestMessage {
 #[derive(Debug, Clone)]
 pub enum Message {
     User(String),
-    Assistant(String),
+    Assistant(String, Option<Vec<ToolCall>>),
     System(String),
     Tool(String),
 }
@@ -128,7 +138,7 @@ impl LlmResponse {
 fn llm_response_from_stream(
     stream: &ChatChoiceStream,
     usage: Usage,
-) -> Result<LlmResponse, Box<dyn std::error::Error>> {
+) -> LlmResponse {
     let mut text = String::new();
     let mut tool_calls = Vec::new();
 
@@ -138,25 +148,21 @@ fn llm_response_from_stream(
 
     if let Some(tool_calls_vec) = &stream.delta.tool_calls {
         for tool_call in tool_calls_vec {
-            let name =
-                tool_call.function.as_ref().unwrap().name.clone().unwrap();
-            let arguments = tool_call
-                .function
-                .as_ref()
-                .unwrap()
-                .arguments
-                .clone()
-                .unwrap_or_default();
+            let id = tool_call.id.clone().unwrap();
+            let function = tool_call.function.as_ref().unwrap();
+            let name = function.name.clone().unwrap();
+            let arguments = function.arguments.clone().unwrap_or_default();
 
-            tool_calls.push(ToolCall { name, arguments });
+            tool_calls.push(ToolCall { id, name, arguments });
         }
     }
 
-    Ok(LlmResponse { text, usage, tool_calls })
+    LlmResponse { text, usage, tool_calls }
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct ToolCall {
+    id: String,
     name: String,
     arguments: String,
 }
@@ -168,6 +174,19 @@ impl ToolCall {
 
     pub fn arguments(&self) -> &str {
         &self.arguments
+    }
+}
+
+impl From<ToolCall> for ChatCompletionMessageToolCall {
+    fn from(tool_call: ToolCall) -> Self {
+        Self {
+            id: tool_call.id,
+            r#type: ChatCompletionToolType::Function,
+            function: FunctionCall {
+                name: tool_call.name,
+                arguments: tool_call.arguments,
+            },
+        }
     }
 }
 
@@ -298,7 +317,7 @@ impl LlmClient {
             }
         });
 
-        llm_response_from_stream(&agg.unwrap(), usage)
+        Ok(llm_response_from_stream(&agg.unwrap(), usage))
     }
 
     pub fn get_chat_completion(
@@ -375,12 +394,4 @@ fn make_tool(tool: &ToolDefinition) -> ChatCompletionTool {
             .build()
             .unwrap(),
     }
-
-    // ChatCompletionToolArgs::function(&mut self, value)
-
-    // ChatCompletionTool {
-    //     name: tool.name().to_string(),
-    //     description: tool.description().to_string(),
-    //     args,
-    // }
 }

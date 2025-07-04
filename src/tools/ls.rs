@@ -31,7 +31,9 @@ impl Tool for Ls {
 
         let mut command = std::process::Command::new("/bin/ls");
 
-        if let Some(args) = maybe_input {
+        if let Some(args) = maybe_input
+            && !args.is_empty()
+        {
             command.arg(args);
         }
 

@@ -11,7 +11,7 @@ use std::io::{self};
 
 pub fn run(
     config: Config,
-    messages: Vec<Message>,
+    mut messages: Vec<Message>,
     tools: Vec<Box<dyn Tool>>,
     print_usage: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -32,23 +32,35 @@ pub fn run(
             },
         )?;
 
-        writeln!(out).unwrap();
-        out.flush().unwrap();
+        writeln!(out)?;
+        out.flush()?;
 
         if print_usage {
-            writeln!(out, "{:?}", response.usage()).unwrap();
+            writeln!(out, "{:?}", response.usage())?;
         }
 
-        out.flush().unwrap();
+        out.flush()?;
 
         if response.tool_calls().is_empty() {
             break;
         }
 
+        // Add the response message to the messages:
+        {
+            let assistant_message = Message::Assistant(
+                response.text().to_owned(),
+                match response.tool_calls() {
+                    &[] => None,
+                    tool_calls => Some(tool_calls.to_vec()),
+                },
+            );
+            messages.push(assistant_message);
+        }
+
         info!("{:?}", response.tool_calls());
 
         // Invoke the tool:
-        {
+        let tool_output = {
             let first_tool = response.tool_calls().first().unwrap();
             let matching_tool = tools
                 .iter()
@@ -57,8 +69,11 @@ pub fn run(
                     format!("Tool {} not found", first_tool.name())
                 })?;
 
-            invoke_tool(matching_tool.as_ref(), first_tool.arguments())?;
-        }
+            invoke_tool(matching_tool.as_ref(), first_tool.arguments())?
+        };
+
+        // add a tool message
+        messages.push(Message::Tool(tool_output));
     }
 
     Ok(())
