@@ -576,7 +576,8 @@ mod tests {
         assert!(api_error.to_string().contains("API error"));
 
         let serialization_error = LlmError::SerializationError(
-            serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err(),
+            serde_json::from_str::<serde_json::Value>("invalid json")
+                .unwrap_err(),
         );
         assert!(
             serialization_error.to_string().contains("Serialization error")
@@ -606,7 +607,8 @@ mod tests {
         assert!(api_error.source().is_some());
 
         let serialization_error = LlmError::SerializationError(
-            serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err(),
+            serde_json::from_str::<serde_json::Value>("invalid json")
+                .unwrap_err(),
         );
         assert!(serialization_error.source().is_some());
 
@@ -626,7 +628,9 @@ mod tests {
         let llm_error: LlmError = openai_error.into();
         matches!(llm_error, LlmError::ApiError(_));
 
-        let json_error = serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
+        let json_error =
+            serde_json::from_str::<serde_json::Value>("invalid json")
+                .unwrap_err();
         let llm_error: LlmError = json_error.into();
         matches!(llm_error, LlmError::SerializationError(_));
     }
@@ -725,7 +729,14 @@ mod tests {
                     }
                     _ => panic!("Expected text content"),
                 }
-                assert!(assistant_msg.tool_calls.is_none() || assistant_msg.tool_calls.as_ref().unwrap().is_empty());
+                assert!(
+                    assistant_msg.tool_calls.is_none()
+                        || assistant_msg
+                            .tool_calls
+                            .as_ref()
+                            .unwrap()
+                            .is_empty()
+                );
             }
             _ => panic!("Expected assistant message"),
         }
@@ -744,8 +755,14 @@ mod tests {
 
         match completion_message {
             ChatCompletionRequestMessage::Assistant(assistant_msg) => {
-                assert_eq!(assistant_msg.tool_calls.as_ref().unwrap().len(), 1);
-                assert_eq!(assistant_msg.tool_calls.as_ref().unwrap()[0].id, "call_123");
+                assert_eq!(
+                    assistant_msg.tool_calls.as_ref().unwrap().len(),
+                    1
+                );
+                assert_eq!(
+                    assistant_msg.tool_calls.as_ref().unwrap()[0].id,
+                    "call_123"
+                );
             }
             _ => panic!("Expected assistant message"),
         }
@@ -1037,7 +1054,12 @@ mod tests {
 
     #[test]
     fn test_create_response_from_stream_with_content() {
-        let stream = create_test_chat_choice_stream(0, Some("Hello, world!".to_string()), None, Some(FinishReason::Stop));
+        let stream = create_test_chat_choice_stream(
+            0,
+            Some("Hello, world!".to_string()),
+            None,
+            Some(FinishReason::Stop),
+        );
 
         let usage = Usage::new(100, 50, 150);
         let response = create_response_from_stream(&stream, usage);
@@ -1059,7 +1081,12 @@ mod tests {
             }),
         }];
 
-        let stream = create_test_chat_choice_stream(0, None, Some(tool_calls), Some(FinishReason::ToolCalls));
+        let stream = create_test_chat_choice_stream(
+            0,
+            None,
+            Some(tool_calls),
+            Some(FinishReason::ToolCalls),
+        );
 
         let usage = Usage::new(100, 50, 150);
         let response = create_response_from_stream(&stream, usage);
@@ -1099,8 +1126,17 @@ mod tests {
             ChatCompletionToolType::Function
         );
         assert_eq!(chat_completion_tool.function.name, "test_tool");
-        assert_eq!(chat_completion_tool.function.description, Some("A test tool".to_string()));
-        assert!(chat_completion_tool.function.parameters.as_ref().map_or(false, |p| p.is_object()));
+        assert_eq!(
+            chat_completion_tool.function.description,
+            Some("A test tool".to_string())
+        );
+        assert!(
+            chat_completion_tool
+                .function
+                .parameters
+                .as_ref()
+                .map_or(false, |p| p.is_object())
+        );
     }
 
     #[test]
@@ -1117,7 +1153,12 @@ mod tests {
             }),
         }];
 
-        let source = create_test_chat_choice_stream(0, None, Some(source_tool_calls), None);
+        let source = create_test_chat_choice_stream(
+            0,
+            None,
+            Some(source_tool_calls),
+            None,
+        );
 
         merge_tool_calls(&mut target, &source);
 
@@ -1139,7 +1180,12 @@ mod tests {
             }),
         }];
 
-        let mut target = create_test_chat_choice_stream(0, None, Some(existing_tool_calls), None);
+        let mut target = create_test_chat_choice_stream(
+            0,
+            None,
+            Some(existing_tool_calls),
+            None,
+        );
 
         let source_tool_calls = vec![ChatCompletionMessageToolCallChunk {
             index: 0,
@@ -1151,7 +1197,12 @@ mod tests {
             }),
         }];
 
-        let source = create_test_chat_choice_stream(0, None, Some(source_tool_calls), None);
+        let source = create_test_chat_choice_stream(
+            0,
+            None,
+            Some(source_tool_calls),
+            None,
+        );
 
         merge_tool_calls(&mut target, &source);
 
@@ -1180,7 +1231,12 @@ mod tests {
             }),
         }];
 
-        let source = create_test_chat_choice_stream(0, None, Some(source_tool_calls), None);
+        let source = create_test_chat_choice_stream(
+            0,
+            None,
+            Some(source_tool_calls),
+            None,
+        );
 
         merge_tool_calls(&mut target, &source);
 
@@ -1200,7 +1256,12 @@ mod tests {
 
     // Helper function to create a test ChatChoiceStream
     #[allow(deprecated)]
-    fn create_test_chat_choice_stream(index: u32, content: Option<String>, tool_calls: Option<Vec<ChatCompletionMessageToolCallChunk>>, finish_reason: Option<FinishReason>) -> ChatChoiceStream {
+    fn create_test_chat_choice_stream(
+        index: u32,
+        content: Option<String>,
+        tool_calls: Option<Vec<ChatCompletionMessageToolCallChunk>>,
+        finish_reason: Option<FinishReason>,
+    ) -> ChatChoiceStream {
         ChatChoiceStream {
             index,
             delta: ChatCompletionStreamResponseDelta {
