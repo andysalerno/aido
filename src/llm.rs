@@ -3,6 +3,7 @@ use async_openai::{
     config::OpenAIConfig,
     types::{
         ChatChoiceStream, ChatCompletionMessageToolCall,
+        ChatCompletionMessageToolCallChunk,
         ChatCompletionRequestAssistantMessageArgs,
         ChatCompletionRequestAssistantMessageContent,
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageArgs,
@@ -12,7 +13,8 @@ use async_openai::{
         ChatCompletionRequestUserMessageArgs,
         ChatCompletionRequestUserMessageContent, ChatCompletionStreamOptions,
         ChatCompletionTool, ChatCompletionToolType,
-        CreateChatCompletionRequestArgs, FunctionCall, FunctionObjectArgs,
+        CreateChatCompletionRequestArgs, FunctionCall, FunctionCallStream,
+        FunctionObjectArgs,
     },
 };
 use futures_util::StreamExt;
@@ -450,6 +452,21 @@ fn merge_stream_chunks(
     source: &ChatChoiceStream,
 ) {
     // Merge content
+    merge_stream_content(target, source);
+
+    // Merge tool calls
+    merge_tool_calls(target, source);
+
+    // Update finish reason
+    if let Some(finish_reason) = &source.finish_reason {
+        target.finish_reason = Some(*finish_reason);
+    }
+}
+
+fn merge_stream_content(
+    target: &mut ChatChoiceStream,
+    source: &ChatChoiceStream,
+) {
     if let Some(delta_content) = &source.delta.content {
         if let Some(existing_content) = &mut target.delta.content {
             existing_content.push_str(delta_content);
@@ -457,8 +474,34 @@ fn merge_stream_chunks(
             target.delta.content = Some(delta_content.clone());
         }
     }
+}
 
-    // Merge tool calls
+fn merge_function_calls(
+    target: &mut ChatCompletionMessageToolCallChunk,
+    source: &FunctionCallStream,
+) {
+    // Merge function data
+    if target.function.is_none() {
+        target.function = Some(FunctionCallStream {
+            name: source.name.clone(),
+            arguments: source.arguments.clone(),
+        });
+    } else if let Some(target_function) = &mut target.function {
+        // Copy function name if it doesn't exist
+        if target_function.name.is_none() && source.name.is_some() {
+            target_function.name.clone_from(&source.name);
+        }
+
+        // Append function arguments
+        if let Some(args) = &source.arguments {
+            let target_args =
+                target_function.arguments.get_or_insert_with(String::new);
+            target_args.push_str(args);
+        }
+    }
+}
+
+fn merge_tool_calls(target: &mut ChatChoiceStream, source: &ChatChoiceStream) {
     if let Some(tool_calls) = &source.delta.tool_calls {
         let target_tool_calls =
             target.delta.tool_calls.get_or_insert_with(Vec::new);
@@ -468,15 +511,12 @@ fn merge_stream_chunks(
 
             // Extend the vector if needed with empty placeholders
             while index >= target_tool_calls.len() {
-                target_tool_calls.push(
-                    async_openai::types::ChatCompletionMessageToolCallChunk {
-                        index: u32::try_from(target_tool_calls.len())
-                            .unwrap_or(0),
-                        id: None,
-                        r#type: None,
-                        function: None,
-                    },
-                );
+                target_tool_calls.push(ChatCompletionMessageToolCallChunk {
+                    index: u32::try_from(target_tool_calls.len()).unwrap_or(0),
+                    id: None,
+                    r#type: None,
+                    function: None,
+                });
             }
 
             // Update the existing tool call at this index
@@ -493,39 +533,10 @@ fn merge_stream_chunks(
                 target_tool_call.r#type.clone_from(&tool_call.r#type);
             }
 
-            // Merge function data
             if let Some(function) = &tool_call.function {
-                if target_tool_call.function.is_none() {
-                    target_tool_call.function =
-                        Some(async_openai::types::FunctionCallStream {
-                            name: function.name.clone(),
-                            arguments: function.arguments.clone(),
-                        });
-                } else if let Some(target_function) =
-                    &mut target_tool_call.function
-                {
-                    // Copy function name if it doesn't exist
-                    if target_function.name.is_none()
-                        && function.name.is_some()
-                    {
-                        target_function.name.clone_from(&function.name);
-                    }
-
-                    // Append function arguments
-                    if let Some(args) = &function.arguments {
-                        let target_args = target_function
-                            .arguments
-                            .get_or_insert_with(String::new);
-                        target_args.push_str(args);
-                    }
-                }
+                merge_function_calls(target_tool_call, function);
             }
         }
-    }
-
-    // Update finish reason
-    if let Some(finish_reason) = &source.finish_reason {
-        target.finish_reason = Some(*finish_reason);
     }
 }
 
