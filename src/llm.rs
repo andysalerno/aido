@@ -827,8 +827,8 @@ mod tests {
         }];
         let response = LlmResponse {
             text: "Hello, world!".to_string(),
-            usage: usage,
-            tool_calls: tool_calls,
+            usage,
+            tool_calls,
         };
 
         assert_eq!(response.text(), "Hello, world!");
