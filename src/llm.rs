@@ -628,11 +628,11 @@ mod tests {
         let llm_error: LlmError = openai_error.into();
         matches!(llm_error, LlmError::ApiError(_));
 
-        let json_error =
-            serde_json::from_str::<serde_json::Value>("invalid json")
-                .unwrap_err();
+        assert!(matches!(llm_error, LlmError::ApiError(_)));
+
+        let json_error = serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
         let llm_error: LlmError = json_error.into();
-        matches!(llm_error, LlmError::SerializationError(_));
+        assert!(matches!(llm_error, LlmError::SerializationError(_)));
     }
 
     #[test]
