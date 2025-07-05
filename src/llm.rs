@@ -482,7 +482,7 @@ fn merge_function_calls(
 ) {
     // Merge function data
     if target.function.is_none() {
-        target.function = Some(async_openai::types::FunctionCallStream {
+        target.function = Some(FunctionCallStream {
             name: source.name.clone(),
             arguments: source.arguments.clone(),
         });
@@ -511,15 +511,12 @@ fn merge_tool_calls(target: &mut ChatChoiceStream, source: &ChatChoiceStream) {
 
             // Extend the vector if needed with empty placeholders
             while index >= target_tool_calls.len() {
-                target_tool_calls.push(
-                    async_openai::types::ChatCompletionMessageToolCallChunk {
-                        index: u32::try_from(target_tool_calls.len())
-                            .unwrap_or(0),
-                        id: None,
-                        r#type: None,
-                        function: None,
-                    },
-                );
+                target_tool_calls.push(ChatCompletionMessageToolCallChunk {
+                    index: u32::try_from(target_tool_calls.len()).unwrap_or(0),
+                    id: None,
+                    r#type: None,
+                    function: None,
+                });
             }
 
             // Update the existing tool call at this index
