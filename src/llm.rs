@@ -816,7 +816,7 @@ mod tests {
             Message::User("Hello".to_string()),
         ];
         let tools = vec![]; // Empty tools for simplicity
-        let request = LlmRequest::new(messages.clone(), tools.clone());
+        let request = LlmRequest::new(messages, tools);
 
         assert_eq!(request.messages().len(), 2);
         assert_eq!(request.tools().len(), 0);
@@ -832,8 +832,8 @@ mod tests {
         }];
         let response = LlmResponse {
             text: "Hello, world!".to_string(),
-            usage: usage.clone(),
-            tool_calls: tool_calls.clone(),
+            usage: usage,
+            tool_calls: tool_calls,
         };
 
         assert_eq!(response.text(), "Hello, world!");
@@ -1135,7 +1135,7 @@ mod tests {
                 .function
                 .parameters
                 .as_ref()
-                .map_or(false, |p| p.is_object())
+                .is_some_and(serde_json::Value::is_object)
         );
     }
 
