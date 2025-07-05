@@ -731,14 +731,7 @@ mod tests {
                     }
                     _ => panic!("Expected text content"),
                 }
-                assert!(
-                    assistant_msg.tool_calls.is_none()
-                        || assistant_msg
-                            .tool_calls
-                            .as_ref()
-                            .unwrap()
-                            .is_empty()
-                );
+                assert!(assistant_msg.tool_calls.as_ref().unwrap().is_empty());
             }
             _ => panic!("Expected assistant message"),
         }
