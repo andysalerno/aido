@@ -1,156 +1,237 @@
+//! Recipe parsing and management for the aido tool
+//!
+//! This module handles the parsing and management of recipe files, which contain
+//! YAML frontmatter headers and markdown body content. Recipes define templates
+//! for AI interactions with specific tools and configurations.
+
 use std::path::Path;
 use std::sync::LazyLock;
 
 use log::info;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-/// Regex pattern to match header delimiters (3 or more dashes) at the start of the document
+/// Custom error types for recipe operations
+#[derive(Error, Debug)]
+pub enum RecipeError {
+    #[error("Recipe '{name}' not found")]
+    NotFound { name: String },
+
+    #[error("Recipe content is empty")]
+    EmptyContent,
+
+    #[error("Invalid recipe format: {message}")]
+    InvalidFormat { message: String },
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("YAML parsing error: {0}")]
+    Yaml(#[from] serde_yaml::Error),
+}
+
+/// Regex pattern to match YAML frontmatter delimiters in recipe files
+///
 /// The pattern captures:
-/// 1. Opening delimiter (3+ dashes) at the very beginning
-/// 2. Header content (non-greedy match, including newlines)
-/// 3. Closing delimiter (3+ dashes)
-/// 4. Remaining body content
+/// 1. Opening delimiter (3 or more dashes) at the very beginning of the document
+/// 2. Header content (YAML frontmatter, using non-greedy match including newlines)
+/// 3. Closing delimiter (3 or more dashes) on its own line
+/// 4. Remaining body content (everything after the closing delimiter)
+///
+/// Example matches:
+/// ```text
+/// ---
+/// name: example
+/// allowed_tools: [ls, cat]
+/// ---
+/// This is the body content.
+/// ```
 static HEADER_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?s)^(-{3,})\s*\n(.*?)\n(-{3,})\s*\n(.*)$").unwrap()
 });
 
+/// A recipe file containing a YAML header and markdown body
 #[derive(Debug, Clone)]
 pub struct Recipe {
-    /// The yaml frontmatter header of the recipe
+    /// The YAML frontmatter header of the recipe
     header: Header,
-
-    /// The body of the recipe
+    /// The body content of the recipe
     body: String,
 }
 
 impl Recipe {
+    /// Create a new recipe with the given header and body
+    pub fn new(header: Header, body: String) -> Self {
+        Self { header, body }
+    }
+
+    /// Get a reference to the recipe's header
+    #[must_use]
     pub fn header(&self) -> &Header {
         &self.header
     }
 
+    /// Get the recipe's body content
+    #[must_use]
     pub fn body(&self) -> &str {
         &self.body
     }
 }
 
-#[derive(Default, Debug, Clone)]
+/// Header information parsed from the YAML frontmatter
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Header {
+    /// The name of the recipe
+    #[serde(default)]
     name: String,
-
+    /// List of tools allowed to be used by this recipe
+    #[serde(default)]
     allowed_tools: Vec<String>,
 }
 
 impl Header {
-    fn parse(content: &str) -> Self {
-        let mut name = String::new();
-        let mut allowed_tools = Vec::new();
-
-        for line in content.lines() {
-            if line.starts_with("name:") {
-                name = line.strip_prefix("name:").unwrap().trim().to_string();
-            } else if line.starts_with("allowed_tools:") {
-                allowed_tools = line
-                    .strip_prefix("allowed_tools:")
-                    .unwrap()
-                    .trim()
-                    .trim_matches(|c| c == '[' || c == ']')
-                    .split(',')
-                    .map(|s| s.trim().to_string())
-                    .collect();
-            }
+    /// Parse header content from YAML string
+    fn parse(content: &str) -> Result<Self, RecipeError> {
+        if content.trim().is_empty() {
+            return Ok(Self::default());
         }
 
-        Self { name, allowed_tools }
+        // Try to parse as YAML first, but fall back to empty header if it fails
+        serde_yaml::from_str(content).or_else(|_| {
+            // If YAML parsing fails, return an empty header
+            // This maintains backwards compatibility with non-YAML headers
+            Ok(Self::default())
+        })
     }
 
+    /// Create an empty header
     fn empty() -> Self {
         Self::default()
     }
 
+    /// Get the recipe name
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Get the list of allowed tools
+    #[must_use]
     pub fn allowed_tools(&self) -> &[String] {
         &self.allowed_tools
     }
 }
 
-/// Lists all available recipes in the recipes directory
-pub fn list(config_file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    // recipe dir is in the parent dir of the config file
-    let recipe_dir = get_recipes_dir(config_file_path);
+/// Information about a recipe file
+#[derive(Debug, Clone)]
+pub struct RecipeInfo {
+    /// The name of the recipe (filename without extension)
+    pub name: String,
+    /// The display name from the recipe header
+    pub display_name: String,
+}
 
-    // List all recipes in the directory:
-    let entries = std::fs::read_dir(recipe_dir)?;
+/// Lists all available recipes in the recipes directory
+pub fn list(config_file_path: &str) -> Result<Vec<RecipeInfo>, RecipeError> {
+    let recipe_dir = get_recipes_dir(config_file_path);
+    let mut recipes = Vec::new();
+
+    let entries = std::fs::read_dir(&recipe_dir)?;
 
     for entry in entries
         .flatten()
         .filter(|e| e.file_type().is_ok_and(|ft| ft.is_file()))
     {
-        if let Some(name) = entry.file_name().to_str()
-            && name.ends_with(".recipe")
-        {
-            println!("- {name}");
+        if let Some(filename) = entry.file_name().to_str() {
+            if let Some(name) = filename.strip_suffix(".recipe") {
+                // Try to get the display name from the recipe header
+                let display_name = get_content(&recipe_dir, name)
+                    .and_then(|content| parse_recipe(&content))
+                    .map_or_else(
+                        |_| name.to_string(),
+                        |recipe| {
+                            let header_name = recipe.header().name();
+                            if header_name.is_empty() {
+                                name.to_string()
+                            } else {
+                                header_name.to_string()
+                            }
+                        },
+                    );
+
+                recipes
+                    .push(RecipeInfo { name: name.to_string(), display_name });
+            }
         }
     }
 
-    // todo - this should obviously return the recipes, not just print them
-    Ok(())
+    Ok(recipes)
 }
 
+/// Get the raw content of a recipe file
 pub fn get_content(
     recipes_dir: &Path,
     name: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
+) -> Result<String, RecipeError> {
     let recipe_path = recipes_dir.join(format!("{name}.recipe"));
 
     if !recipe_path.exists() {
-        return Err(format!("Recipe '{name}' not found").into());
+        return Err(RecipeError::NotFound { name: name.to_string() });
     }
 
     let content = std::fs::read_to_string(recipe_path)?;
     Ok(content)
 }
 
-pub fn get(
-    recipes_dir: &Path,
-    name: &str,
-) -> Result<Recipe, Box<dyn std::error::Error>> {
+/// Parse and retrieve a recipe by name
+pub fn get(recipes_dir: &Path, name: &str) -> Result<Recipe, RecipeError> {
     let content = get_content(recipes_dir, name)?;
     let recipe = parse_recipe(&content)?;
 
     info!("Retrieved recipe: {recipe:?}");
 
-    // Return the body of the recipe
     Ok(recipe)
 }
 
+/// Get the recipes directory path from a config file path
+#[must_use]
 pub fn get_recipes_dir(config_file_path: &str) -> std::path::PathBuf {
-    std::path::Path::new(config_file_path).parent().unwrap().join("recipes")
+    std::path::Path::new(config_file_path)
+        .parent()
+        .expect("Config file path should have a parent directory")
+        .join("recipes")
 }
 
-fn parse_recipe(content: &str) -> Result<Recipe, Box<dyn std::error::Error>> {
+/// Parse a recipe from its string content
+fn parse_recipe(content: &str) -> Result<Recipe, RecipeError> {
     if content.trim().is_empty() {
-        return Err("Recipe content is empty".into());
+        return Err(RecipeError::EmptyContent);
     }
 
     HEADER_REGEX.captures(content).map_or_else(
-        || Ok(Recipe { header: Header::empty(), body: content.to_string() }),
+        || Ok(Recipe::new(Header::empty(), content.to_string())),
         |captures| {
-            let header = captures.get(2).unwrap().as_str();
-            let body = captures.get(4).unwrap().as_str();
+            let header_content =
+                captures.get(2).ok_or_else(|| RecipeError::InvalidFormat {
+                    message: "Could not extract header content".to_string(),
+                })?;
+            let body_content =
+                captures.get(4).ok_or_else(|| RecipeError::InvalidFormat {
+                    message: "Could not extract body content".to_string(),
+                })?;
 
-            Ok(Recipe {
-                header: Header::parse(header),
-                body: body.trim().to_string(),
-            })
+            let header = Header::parse(header_content.as_str())?;
+            let body = body_content.as_str().trim().to_string();
+
+            Ok(Recipe::new(header, body))
         },
     )
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[test]
     fn test_recipe_parsing_1() {
@@ -358,5 +439,47 @@ mod tests {
 
         assert_eq!(recipe.header.name(), "Test");
         assert_eq!(recipe.body, "Body content.");
+    }
+
+    #[test]
+    fn test_recipe_parsing_proper_yaml() {
+        let content = "---\nname: test recipe\nallowed_tools:\n  - ls\n  - cat\n---\nThis is the body.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header.name(), "test recipe");
+        assert_eq!(recipe.header.allowed_tools(), &["ls", "cat"]);
+        assert_eq!(recipe.body, "This is the body.");
+    }
+
+    #[test]
+    fn test_recipe_parsing_yaml_with_quotes() {
+        let content = "---\nname: \"quoted name\"\nallowed_tools: [\"ls\", \"cat\"]\n---\nBody content.";
+        let recipe = super::parse_recipe(content).unwrap();
+
+        assert_eq!(recipe.header.name(), "quoted name");
+        assert_eq!(recipe.header.allowed_tools(), &["ls", "cat"]);
+        assert_eq!(recipe.body, "Body content.");
+    }
+
+    #[test]
+    fn test_recipe_error_handling() {
+        // Test empty content
+        let result = super::parse_recipe("");
+        assert!(matches!(result, Err(RecipeError::EmptyContent)));
+
+        // Test whitespace only content
+        let result = super::parse_recipe("   \n  \t  \n");
+        assert!(matches!(result, Err(RecipeError::EmptyContent)));
+    }
+
+    #[test]
+    fn test_recipe_info_struct() {
+        let info = RecipeInfo {
+            name: "test".to_string(),
+            display_name: "Test Recipe".to_string(),
+        };
+
+        assert_eq!(info.name, "test");
+        assert_eq!(info.display_name, "Test Recipe");
     }
 }
