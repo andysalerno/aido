@@ -556,3 +556,662 @@ fn create_chat_completion_tool(tool: &ToolDefinition) -> ChatCompletionTool {
             .expect("Failed to build function object"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tools::{Arg, ArgType, ToolDefinition};
+    use async_openai::types::{
+        ChatCompletionStreamResponseDelta, FinishReason, FunctionCallStream,
+    };
+    use std::error::Error;
+
+    #[test]
+    fn test_llm_error_display() {
+        let api_error = LlmError::ApiError(
+            async_openai::error::OpenAIError::InvalidArgument(
+                "test".to_string(),
+            ),
+        );
+        assert!(api_error.to_string().contains("API error"));
+
+        let serialization_error = LlmError::SerializationError(
+            serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err(),
+        );
+        assert!(
+            serialization_error.to_string().contains("Serialization error")
+        );
+
+        let invalid_response =
+            LlmError::InvalidResponse("bad response".to_string());
+        assert_eq!(
+            invalid_response.to_string(),
+            "Invalid response: bad response"
+        );
+
+        let missing_data = LlmError::MissingData("missing field".to_string());
+        assert_eq!(
+            missing_data.to_string(),
+            "Missing required data: missing field"
+        );
+    }
+
+    #[test]
+    fn test_llm_error_source() {
+        let api_error = LlmError::ApiError(
+            async_openai::error::OpenAIError::InvalidArgument(
+                "test".to_string(),
+            ),
+        );
+        assert!(api_error.source().is_some());
+
+        let serialization_error = LlmError::SerializationError(
+            serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err(),
+        );
+        assert!(serialization_error.source().is_some());
+
+        let invalid_response =
+            LlmError::InvalidResponse("bad response".to_string());
+        assert!(invalid_response.source().is_none());
+
+        let missing_data = LlmError::MissingData("missing field".to_string());
+        assert!(missing_data.source().is_none());
+    }
+
+    #[test]
+    fn test_llm_error_from_conversions() {
+        let openai_error = async_openai::error::OpenAIError::InvalidArgument(
+            "test".to_string(),
+        );
+        let llm_error: LlmError = openai_error.into();
+        matches!(llm_error, LlmError::ApiError(_));
+
+        let json_error = serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
+        let llm_error: LlmError = json_error.into();
+        matches!(llm_error, LlmError::SerializationError(_));
+    }
+
+    #[test]
+    fn test_usage_creation_and_getters() {
+        let usage = Usage::new(100, 50, 150);
+        assert_eq!(usage.prompt_tokens(), 100);
+        assert_eq!(usage.completion_tokens(), 50);
+        assert_eq!(usage.total_tokens(), 150);
+    }
+
+    #[test]
+    fn test_usage_default() {
+        let usage = Usage::default();
+        assert_eq!(usage.prompt_tokens(), 0);
+        assert_eq!(usage.completion_tokens(), 0);
+        assert_eq!(usage.total_tokens(), 0);
+    }
+
+    #[test]
+    fn test_tool_call_creation_and_getters() {
+        let tool_call = ToolCall {
+            id: "call_123".to_string(),
+            name: "test_tool".to_string(),
+            arguments: r#"{"param": "value"}"#.to_string(),
+        };
+
+        assert_eq!(tool_call.id(), "call_123");
+        assert_eq!(tool_call.name(), "test_tool");
+        assert_eq!(tool_call.arguments(), r#"{"param": "value"}"#);
+    }
+
+    #[test]
+    fn test_tool_call_default() {
+        let tool_call = ToolCall::default();
+        assert_eq!(tool_call.id(), "");
+        assert_eq!(tool_call.name(), "");
+        assert_eq!(tool_call.arguments(), "");
+    }
+
+    #[test]
+    fn test_tool_call_to_chat_completion_message_tool_call() {
+        let tool_call = ToolCall {
+            id: "call_123".to_string(),
+            name: "test_tool".to_string(),
+            arguments: r#"{"param": "value"}"#.to_string(),
+        };
+
+        let completion_tool_call: ChatCompletionMessageToolCall =
+            tool_call.into();
+        assert_eq!(completion_tool_call.id, "call_123");
+        assert_eq!(completion_tool_call.function.name, "test_tool");
+        assert_eq!(
+            completion_tool_call.function.arguments,
+            r#"{"param": "value"}"#
+        );
+        assert_eq!(
+            completion_tool_call.r#type,
+            ChatCompletionToolType::Function
+        );
+    }
+
+    #[test]
+    fn test_message_user_conversion() {
+        let message = Message::User("Hello, world!".to_string());
+        let completion_message: ChatCompletionRequestMessage = message.into();
+
+        match completion_message {
+            ChatCompletionRequestMessage::User(user_msg) => {
+                match user_msg.content {
+                    ChatCompletionRequestUserMessageContent::Text(text) => {
+                        assert_eq!(text, "Hello, world!");
+                    }
+                    _ => panic!("Expected text content"),
+                }
+            }
+            _ => panic!("Expected user message"),
+        }
+    }
+
+    #[test]
+    fn test_message_assistant_conversion_without_tools() {
+        let message = Message::Assistant("Hi there!".to_string(), None);
+        let completion_message: ChatCompletionRequestMessage = message.into();
+
+        match completion_message {
+            ChatCompletionRequestMessage::Assistant(assistant_msg) => {
+                match assistant_msg.content {
+                    Some(
+                        ChatCompletionRequestAssistantMessageContent::Text(
+                            text,
+                        ),
+                    ) => {
+                        assert_eq!(text, "Hi there!");
+                    }
+                    _ => panic!("Expected text content"),
+                }
+                assert!(assistant_msg.tool_calls.is_none() || assistant_msg.tool_calls.as_ref().unwrap().is_empty());
+            }
+            _ => panic!("Expected assistant message"),
+        }
+    }
+
+    #[test]
+    fn test_message_assistant_conversion_with_tools() {
+        let tool_calls = vec![ToolCall {
+            id: "call_123".to_string(),
+            name: "test_tool".to_string(),
+            arguments: r#"{"param": "value"}"#.to_string(),
+        }];
+        let message =
+            Message::Assistant("Using tool".to_string(), Some(tool_calls));
+        let completion_message: ChatCompletionRequestMessage = message.into();
+
+        match completion_message {
+            ChatCompletionRequestMessage::Assistant(assistant_msg) => {
+                assert_eq!(assistant_msg.tool_calls.as_ref().unwrap().len(), 1);
+                assert_eq!(assistant_msg.tool_calls.as_ref().unwrap()[0].id, "call_123");
+            }
+            _ => panic!("Expected assistant message"),
+        }
+    }
+
+    #[test]
+    fn test_message_system_conversion() {
+        let message =
+            Message::System("You are a helpful assistant".to_string());
+        let completion_message: ChatCompletionRequestMessage = message.into();
+
+        match completion_message {
+            ChatCompletionRequestMessage::System(system_msg) => {
+                match system_msg.content {
+                    ChatCompletionRequestSystemMessageContent::Text(text) => {
+                        assert_eq!(text, "You are a helpful assistant");
+                    }
+                    _ => panic!("Expected text content"),
+                }
+            }
+            _ => panic!("Expected system message"),
+        }
+    }
+
+    #[test]
+    fn test_message_tool_conversion() {
+        let message = Message::Tool {
+            content: "Tool result".to_string(),
+            id: "call_123".to_string(),
+        };
+        let completion_message: ChatCompletionRequestMessage = message.into();
+
+        match completion_message {
+            ChatCompletionRequestMessage::Tool(tool_msg) => {
+                match tool_msg.content {
+                    ChatCompletionRequestToolMessageContent::Text(text) => {
+                        assert_eq!(text, "Tool result");
+                    }
+                    _ => panic!("Expected text content"),
+                }
+                assert_eq!(tool_msg.tool_call_id, "call_123");
+            }
+            _ => panic!("Expected tool message"),
+        }
+    }
+
+    #[test]
+    fn test_llm_request_creation() {
+        let messages = vec![
+            Message::System("You are helpful".to_string()),
+            Message::User("Hello".to_string()),
+        ];
+        let tools = vec![]; // Empty tools for simplicity
+        let request = LlmRequest::new(messages.clone(), tools.clone());
+
+        assert_eq!(request.messages().len(), 2);
+        assert_eq!(request.tools().len(), 0);
+    }
+
+    #[test]
+    fn test_llm_response_creation_and_getters() {
+        let usage = Usage::new(100, 50, 150);
+        let tool_calls = vec![ToolCall {
+            id: "call_123".to_string(),
+            name: "test_tool".to_string(),
+            arguments: r#"{"param": "value"}"#.to_string(),
+        }];
+        let response = LlmResponse {
+            text: "Hello, world!".to_string(),
+            usage: usage.clone(),
+            tool_calls: tool_calls.clone(),
+        };
+
+        assert_eq!(response.text(), "Hello, world!");
+        assert_eq!(response.usage().total_tokens(), 150);
+        assert_eq!(response.tool_calls().len(), 1);
+        assert_eq!(response.tool_calls()[0].id(), "call_123");
+    }
+
+    #[test]
+    fn test_llm_response_default() {
+        let response = LlmResponse::default();
+        assert_eq!(response.text(), "");
+        assert_eq!(response.usage().total_tokens(), 0);
+        assert_eq!(response.tool_calls().len(), 0);
+    }
+
+    #[test]
+    fn test_llm_client_creation() {
+        let client = LlmClient::new(
+            "gpt-4",
+            "test-api-key",
+            "https://api.openai.com/v1",
+        );
+        assert_eq!(client.model_name, "gpt-4");
+        assert_eq!(client.temperature, 0.7);
+    }
+
+    #[test]
+    fn test_llm_client_with_temperature() {
+        let client = LlmClient::new(
+            "gpt-4",
+            "test-api-key",
+            "https://api.openai.com/v1",
+        )
+        .with_temperature(0.3);
+
+        assert_eq!(client.temperature, 0.3);
+    }
+
+    #[test]
+    fn test_merge_function_calls_with_new_target() {
+        let mut target = ChatCompletionMessageToolCallChunk {
+            index: 0,
+            id: Some("call_123".to_string()),
+            r#type: Some(ChatCompletionToolType::Function),
+            function: None,
+        };
+
+        let source = FunctionCallStream {
+            name: Some("test_tool".to_string()),
+            arguments: Some(r#"{"param": "value"}"#.to_string()),
+        };
+
+        merge_function_calls(&mut target, &source);
+
+        assert!(target.function.is_some());
+        let function = target.function.as_ref().unwrap();
+        assert_eq!(function.name, Some("test_tool".to_string()));
+        assert_eq!(
+            function.arguments,
+            Some(r#"{"param": "value"}"#.to_string())
+        );
+    }
+
+    #[test]
+    fn test_merge_function_calls_with_existing_target() {
+        let mut target = ChatCompletionMessageToolCallChunk {
+            index: 0,
+            id: Some("call_123".to_string()),
+            r#type: Some(ChatCompletionToolType::Function),
+            function: Some(FunctionCallStream {
+                name: Some("test_tool".to_string()),
+                arguments: Some(r#"{"param": "#.to_string()),
+            }),
+        };
+
+        let source = FunctionCallStream {
+            name: None,
+            arguments: Some(r#""value"}"#.to_string()),
+        };
+
+        merge_function_calls(&mut target, &source);
+
+        let function = target.function.as_ref().unwrap();
+        assert_eq!(function.name, Some("test_tool".to_string()));
+        assert_eq!(
+            function.arguments,
+            Some(r#"{"param": "value"}"#.to_string())
+        );
+    }
+
+    #[test]
+    fn test_merge_function_calls_with_missing_name() {
+        let mut target = ChatCompletionMessageToolCallChunk {
+            index: 0,
+            id: Some("call_123".to_string()),
+            r#type: Some(ChatCompletionToolType::Function),
+            function: Some(FunctionCallStream {
+                name: None,
+                arguments: Some(r#"{"param": "value"}"#.to_string()),
+            }),
+        };
+
+        let source = FunctionCallStream {
+            name: Some("test_tool".to_string()),
+            arguments: None,
+        };
+
+        merge_function_calls(&mut target, &source);
+
+        let function = target.function.as_ref().unwrap();
+        assert_eq!(function.name, Some("test_tool".to_string()));
+        assert_eq!(
+            function.arguments,
+            Some(r#"{"param": "value"}"#.to_string())
+        );
+    }
+
+    #[test]
+    fn test_merge_stream_content_with_new_content() {
+        let mut target = ChatChoiceStream {
+            index: 0,
+            delta: ChatCompletionStreamResponseDelta {
+                content: None,
+                tool_calls: None,
+                role: None,
+                function_call: None,
+                refusal: None,
+            },
+            finish_reason: None,
+            logprobs: None,
+        };
+
+        let source = ChatChoiceStream {
+            index: 0,
+            delta: ChatCompletionStreamResponseDelta {
+                content: Some("Hello, ".to_string()),
+                tool_calls: None,
+                role: None,
+                function_call: None,
+                refusal: None,
+            },
+            finish_reason: None,
+            logprobs: None,
+        };
+
+        merge_stream_content(&mut target, &source);
+
+        assert_eq!(target.delta.content, Some("Hello, ".to_string()));
+    }
+
+    #[test]
+    fn test_merge_stream_content_with_existing_content() {
+        let mut target = ChatChoiceStream {
+            index: 0,
+            delta: ChatCompletionStreamResponseDelta {
+                content: Some("Hello, ".to_string()),
+                tool_calls: None,
+                role: None,
+                function_call: None,
+                refusal: None,
+            },
+            finish_reason: None,
+            logprobs: None,
+        };
+
+        let source = ChatChoiceStream {
+            index: 0,
+            delta: ChatCompletionStreamResponseDelta {
+                content: Some("world!".to_string()),
+                tool_calls: None,
+                role: None,
+                function_call: None,
+                refusal: None,
+            },
+            finish_reason: None,
+            logprobs: None,
+        };
+
+        merge_stream_content(&mut target, &source);
+
+        assert_eq!(target.delta.content, Some("Hello, world!".to_string()));
+    }
+
+    #[test]
+    fn test_merge_stream_chunks_with_finish_reason() {
+        let mut target = ChatChoiceStream {
+            index: 0,
+            delta: ChatCompletionStreamResponseDelta {
+                content: Some("Hello".to_string()),
+                tool_calls: None,
+                role: None,
+                function_call: None,
+                refusal: None,
+            },
+            finish_reason: None,
+            logprobs: None,
+        };
+
+        let source = ChatChoiceStream {
+            index: 0,
+            delta: ChatCompletionStreamResponseDelta {
+                content: Some(" world!".to_string()),
+                tool_calls: None,
+                role: None,
+                function_call: None,
+                refusal: None,
+            },
+            finish_reason: Some(FinishReason::Stop),
+            logprobs: None,
+        };
+
+        merge_stream_chunks(&mut target, &source);
+
+        assert_eq!(target.delta.content, Some("Hello world!".to_string()));
+        assert_eq!(target.finish_reason, Some(FinishReason::Stop));
+    }
+
+    #[test]
+    fn test_create_response_from_stream_with_content() {
+        let stream = create_test_chat_choice_stream(0, Some("Hello, world!".to_string()), None, Some(FinishReason::Stop));
+
+        let usage = Usage::new(100, 50, 150);
+        let response = create_response_from_stream(&stream, usage);
+
+        assert_eq!(response.text(), "Hello, world!");
+        assert_eq!(response.usage().total_tokens(), 150);
+        assert_eq!(response.tool_calls().len(), 0);
+    }
+
+    #[test]
+    fn test_create_response_from_stream_with_tool_calls() {
+        let tool_calls = vec![ChatCompletionMessageToolCallChunk {
+            index: 0,
+            id: Some("call_123".to_string()),
+            r#type: Some(ChatCompletionToolType::Function),
+            function: Some(FunctionCallStream {
+                name: Some("test_tool".to_string()),
+                arguments: Some(r#"{"param": "value"}"#.to_string()),
+            }),
+        }];
+
+        let stream = create_test_chat_choice_stream(0, None, Some(tool_calls), Some(FinishReason::ToolCalls));
+
+        let usage = Usage::new(100, 50, 150);
+        let response = create_response_from_stream(&stream, usage);
+
+        assert_eq!(response.text(), "");
+        assert_eq!(response.tool_calls().len(), 1);
+        assert_eq!(response.tool_calls()[0].id(), "call_123");
+        assert_eq!(response.tool_calls()[0].name(), "test_tool");
+        assert_eq!(
+            response.tool_calls()[0].arguments(),
+            r#"{"param": "value"}"#
+        );
+    }
+
+    #[test]
+    fn test_create_chat_completion_tool() {
+        let args = vec![
+            Arg::new("param1")
+                .description("A string parameter")
+                .kind(ArgType::String)
+                .required(),
+            Arg::new("param2")
+                .description("A number parameter")
+                .kind(ArgType::Number),
+        ];
+
+        let tool_def = ToolDefinition::new(
+            "test_tool".to_string(),
+            "A test tool".to_string(),
+            args,
+        );
+
+        let chat_completion_tool = create_chat_completion_tool(&tool_def);
+
+        assert_eq!(
+            chat_completion_tool.r#type,
+            ChatCompletionToolType::Function
+        );
+        assert_eq!(chat_completion_tool.function.name, "test_tool");
+        assert_eq!(chat_completion_tool.function.description, Some("A test tool".to_string()));
+        assert!(chat_completion_tool.function.parameters.as_ref().map_or(false, |p| p.is_object()));
+    }
+
+    #[test]
+    fn test_merge_tool_calls_with_new_index() {
+        let mut target = create_test_chat_choice_stream(0, None, None, None);
+
+        let source_tool_calls = vec![ChatCompletionMessageToolCallChunk {
+            index: 0,
+            id: Some("call_123".to_string()),
+            r#type: Some(ChatCompletionToolType::Function),
+            function: Some(FunctionCallStream {
+                name: Some("test_tool".to_string()),
+                arguments: Some(r#"{"param": "value"}"#.to_string()),
+            }),
+        }];
+
+        let source = create_test_chat_choice_stream(0, None, Some(source_tool_calls), None);
+
+        merge_tool_calls(&mut target, &source);
+
+        assert!(target.delta.tool_calls.is_some());
+        let tool_calls = target.delta.tool_calls.as_ref().unwrap();
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0].id, Some("call_123".to_string()));
+    }
+
+    #[test]
+    fn test_merge_tool_calls_with_existing_index() {
+        let existing_tool_calls = vec![ChatCompletionMessageToolCallChunk {
+            index: 0,
+            id: Some("call_123".to_string()),
+            r#type: Some(ChatCompletionToolType::Function),
+            function: Some(FunctionCallStream {
+                name: Some("test_tool".to_string()),
+                arguments: Some(r#"{"param": "#.to_string()),
+            }),
+        }];
+
+        let mut target = create_test_chat_choice_stream(0, None, Some(existing_tool_calls), None);
+
+        let source_tool_calls = vec![ChatCompletionMessageToolCallChunk {
+            index: 0,
+            id: None,
+            r#type: None,
+            function: Some(FunctionCallStream {
+                name: None,
+                arguments: Some(r#""value"}"#.to_string()),
+            }),
+        }];
+
+        let source = create_test_chat_choice_stream(0, None, Some(source_tool_calls), None);
+
+        merge_tool_calls(&mut target, &source);
+
+        let tool_calls = target.delta.tool_calls.as_ref().unwrap();
+        assert_eq!(tool_calls.len(), 1);
+        assert_eq!(tool_calls[0].id, Some("call_123".to_string()));
+
+        let function = tool_calls[0].function.as_ref().unwrap();
+        assert_eq!(
+            function.arguments,
+            Some(r#"{"param": "value"}"#.to_string())
+        );
+    }
+
+    #[test]
+    fn test_merge_tool_calls_with_higher_index() {
+        let mut target = create_test_chat_choice_stream(0, None, None, None);
+
+        let source_tool_calls = vec![ChatCompletionMessageToolCallChunk {
+            index: 2, // Higher index that requires extending the vector
+            id: Some("call_456".to_string()),
+            r#type: Some(ChatCompletionToolType::Function),
+            function: Some(FunctionCallStream {
+                name: Some("another_tool".to_string()),
+                arguments: Some(r#"{"other": "param"}"#.to_string()),
+            }),
+        }];
+
+        let source = create_test_chat_choice_stream(0, None, Some(source_tool_calls), None);
+
+        merge_tool_calls(&mut target, &source);
+
+        let tool_calls = target.delta.tool_calls.as_ref().unwrap();
+        assert_eq!(tool_calls.len(), 3); // Should have extended to include index 2
+
+        // Check the placeholders at indices 0 and 1
+        assert_eq!(tool_calls[0].index, 0);
+        assert!(tool_calls[0].id.is_none());
+        assert_eq!(tool_calls[1].index, 1);
+        assert!(tool_calls[1].id.is_none());
+
+        // Check the actual tool call at index 2
+        assert_eq!(tool_calls[2].index, 2);
+        assert_eq!(tool_calls[2].id, Some("call_456".to_string()));
+    }
+
+    // Helper function to create a test ChatChoiceStream
+    #[allow(deprecated)]
+    fn create_test_chat_choice_stream(index: u32, content: Option<String>, tool_calls: Option<Vec<ChatCompletionMessageToolCallChunk>>, finish_reason: Option<FinishReason>) -> ChatChoiceStream {
+        ChatChoiceStream {
+            index,
+            delta: ChatCompletionStreamResponseDelta {
+                content,
+                tool_calls,
+                role: None,
+                function_call: None,
+                refusal: None,
+            },
+            finish_reason,
+            logprobs: None,
+        }
+    }
+}
